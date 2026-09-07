@@ -1,0 +1,77 @@
+{
+  "version": 1,
+  "module": "example.com/welcome",
+  "title": "Welcome",
+  "width": 760,
+  "height": 540,
+  "padding": 16,
+  "theme": "Lavender",
+  "root": {
+    "id": "root",
+    "kind": "Column",
+    "children": [
+      {
+        "id": "node-1",
+        "kind": "Label",
+        "text": "Welcome to Rosaline",
+        "bold": true
+      },
+      {
+        "id": "node-2",
+        "kind": "Card",
+        "children": [
+          {
+            "id": "node-3",
+            "kind": "Column",
+            "children": [
+              {
+                "id": "node-4",
+                "kind": "Label",
+                "text": "Tell us a little about yourself"
+              },
+              {
+                "id": "node-5",
+                "kind": "TextBox",
+                "text": "Your name",
+                "name": "Name"
+              },
+              {
+                "id": "node-6",
+                "kind": "ComboBox",
+                "name": "FavouriteColour",
+                "options": ["Rose", "Lavender", "Midnight"]
+              },
+              {
+                "id": "node-7",
+                "kind": "CheckBox",
+                "text": "Remember my choices",
+                "name": "Remember"
+              },
+              {
+                "id": "node-8",
+                "kind": "Button",
+                "text": "Continue",
+                "action": "continue",
+                "primary": true
+              }
+            ],
+            "gap": 9,
+            "padding": 8,
+            "expand": true
+          }
+        ],
+        "padding": 16
+      },
+      {
+        "id": "node-9",
+        "kind": "ProgressBar",
+        "name": "Progress",
+        "maximum": 100
+      }
+    ],
+    "gap": 12,
+    "padding": 12,
+    "expand": true
+  }
+}
+
