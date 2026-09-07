@@ -2,7 +2,10 @@
 
 package main
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
 
 func TestPreviewContainsEveryDesignNode(t *testing.T) {
 	project := newProject()
@@ -84,5 +87,21 @@ func TestTailOutput(t *testing.T) {
 	}
 	if got := tailOutput("0123456789", 4); got != "...\n6789" {
 		t.Fatalf("unexpected truncated output: %q", got)
+	}
+}
+
+func TestGeneratedCommandEnvironmentForcesStandalonePureGoBuild(t *testing.T) {
+	t.Setenv("CGO_ENABLED", "1")
+	t.Setenv("GOWORK", "/tmp/parent.work")
+	environment := generatedCommandEnvironment()
+	joined := "\n" + strings.Join(environment, "\n") + "\n"
+	if !strings.Contains(joined, "\nCGO_ENABLED=0\n") {
+		t.Fatal("generated command does not disable CGo")
+	}
+	if !strings.Contains(joined, "\nGOWORK=off\n") {
+		t.Fatal("generated command does not disable an enclosing workspace")
+	}
+	if strings.Count(joined, "\nCGO_ENABLED=") != 1 || strings.Count(joined, "\nGOWORK=") != 1 {
+		t.Fatalf("generated command retained conflicting environment entries: %q", joined)
 	}
 }

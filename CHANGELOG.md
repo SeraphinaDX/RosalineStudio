@@ -2,6 +2,24 @@
 
 All notable Rosaline Studio changes are documented here.
 
+## v0.1.5 - 2026-09-07
+
+- Added a first-run project setup prompt before Studio creates generated files
+  or downloads Rosaline.
+- Explain the target folder, generation, dependency download, build, and run
+  steps before asking the user to continue.
+- Detect incomplete setup, including a missing `go.sum`, and offer setup again.
+- Added regression coverage for generated-project setup detection.
+
+## v0.1.4 - 2026-09-07
+
+- Made Build and Run automatically download Rosaline and all required Go
+  modules before compiling the generated application.
+- Build generated applications independently of an enclosing `go.work` file.
+- Force generated previews to retain Rosaline's pure-Go `CGO_ENABLED=0` build.
+- Include Rosaline v0.15.0 checksums in Studio's own `go.sum`.
+- Added regression coverage for the generated command environment.
+
 ## v0.1.3 - 2026-09-07
 
 - Fixed Build and Run launching Rosaline Studio when a design was saved in the

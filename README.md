@@ -24,6 +24,12 @@ The v0.1 preview is a structural wireframe. It shows the layout, hierarchy,
 selection, and theme without pretending to be a pixel-perfect rendering of the
 generated native window. Press F5 to see the real application.
 
+Build and Run downloads Rosaline and its Go dependencies automatically before
+starting the generated application. Generated applications use
+`CGO_ENABLED=0` and build independently of any surrounding Go workspace.
+On the first run, Studio explains every setup action and asks for confirmation
+before creating files or downloading modules.
+
 ## Requirements
 
 - Go 1.25 or newer
@@ -125,7 +131,7 @@ env CGO_ENABLED=0 ROSALINE_SOURCE=../Rosaline go test ./...
 
 ## Project status
 
-Rosaline Studio v0.1.3 is an intentionally small early release. Generated code
+Rosaline Studio v0.1.5 is an intentionally small early release. Generated code
 and saved designs are designed to stay understandable while the visual tooling
 grows. The design schema is versioned, but the Studio API and file format remain
 experimental until v1.0.

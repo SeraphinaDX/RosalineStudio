@@ -61,11 +61,15 @@ Rosaline Studio repository.
 
 Press F5, or choose **File > Build and Run**. Studio will:
 
+On the first run, Studio shows this setup plan and asks you to confirm it.
+Nothing is downloaded until you choose Yes.
+
 1. Save the design.
 2. Create or update the application subfolder.
 3. Regenerate `ui_generated.go` and `state_generated.go`.
 4. Create the developer files that do not exist yet.
-5. Run that application subfolder with `CGO_ENABLED=0`.
+5. Download Rosaline and its dependencies when needed.
+6. Run that application subfolder with `CGO_ENABLED=0`.
 
 Close the generated application window to return to editing.
 

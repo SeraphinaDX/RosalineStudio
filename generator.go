@@ -43,6 +43,15 @@ func generatedApplicationDirectory(designPath string) string {
 	return filepath.Join(directory, name)
 }
 
+func generatedApplicationNeedsSetup(directory string) bool {
+	for _, name := range []string{"go.mod", "go.sum", "ui_generated.go"} {
+		if _, err := os.Stat(filepath.Join(directory, name)); err != nil {
+			return true
+		}
+	}
+	return false
+}
+
 func generateProject(project *designProject, directory string) (generationReport, error) {
 	var report generationReport
 	if err := project.validate(); err != nil {

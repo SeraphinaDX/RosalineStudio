@@ -141,13 +141,32 @@ func (studio *studio) run() {
 		if _, err := exec.LookPath("go"); err != nil {
 			return fmt.Errorf("find Go command: %w", err)
 		}
-		if !report.Report(10, "Building generated application...") {
+		studio.runMu.Lock()
+		studio.runOutput = ""
+		studio.runMu.Unlock()
+		var output bytes.Buffer
+		environment := generatedCommandEnvironment()
+
+		if !report.Report(5, "Downloading Rosaline and its dependencies...") {
 			return ctx.Err()
 		}
+		download := exec.CommandContext(ctx, "go", "mod", "tidy")
+		download.Dir = directory
+		download.Env = environment
+		download.Stdout = &output
+		download.Stderr = &output
+		if err := download.Run(); err != nil {
+			studio.rememberRunOutput(output.String())
+			return fmt.Errorf("download generated application dependencies: %w", err)
+		}
+
+		if !report.Report(35, "Building generated application...") {
+			return ctx.Err()
+		}
+		output.Reset()
 		command := exec.CommandContext(ctx, "go", "run", ".")
 		command.Dir = directory
-		command.Env = append(os.Environ(), "CGO_ENABLED=0")
-		var output bytes.Buffer
+		command.Env = environment
 		command.Stdout = &output
 		command.Stderr = &output
 		if err := command.Start(); err != nil {
@@ -155,9 +174,7 @@ func (studio *studio) run() {
 		}
 		report.Post(func() { studio.status = "Preview running - close its window to finish" })
 		err := command.Wait()
-		studio.runMu.Lock()
-		studio.runOutput = tailOutput(output.String(), 2400)
-		studio.runMu.Unlock()
+		studio.rememberRunOutput(output.String())
 		if err != nil {
 			return fmt.Errorf("preview exited: %w", err)
 		}
@@ -243,6 +260,23 @@ func (studio *studio) run() {
 			).Gap(8),
 		).Gap(9).Expand(),
 	})
+}
+
+func generatedCommandEnvironment() []string {
+	environment := make([]string, 0, len(os.Environ())+2)
+	for _, value := range os.Environ() {
+		if strings.HasPrefix(value, "CGO_ENABLED=") || strings.HasPrefix(value, "GOWORK=") {
+			continue
+		}
+		environment = append(environment, value)
+	}
+	return append(environment, "CGO_ENABLED=0", "GOWORK=off")
+}
+
+func (studio *studio) rememberRunOutput(output string) {
+	studio.runMu.Lock()
+	studio.runOutput = tailOutput(output, 2400)
+	studio.runMu.Unlock()
 }
 
 func (studio *studio) buildPalettePanel() rosaline.Widget {
@@ -678,6 +712,23 @@ func (studio *studio) runGenerated() {
 		studio.status = "A preview is already running"
 		return
 	}
+	if !studio.save() {
+		return
+	}
+	directory := generatedApplicationDirectory(studio.path)
+	if generatedApplicationNeedsSetup(directory) {
+		message := "This generated application has not been set up yet.\n\n" +
+			"Studio will:\n" +
+			"- create or update " + directory + "\n" +
+			"- generate readable Rosaline Go files\n" +
+			"- download Rosaline and its dependencies\n" +
+			"- build and run the application\n\n" +
+			"Set it up now?"
+		if !rosaline.Confirm("Set up generated application", message) {
+			studio.status = "Application setup canceled"
+			return
+		}
+	}
 	if !studio.generate() {
 		return
 	}
@@ -715,7 +766,7 @@ func (studio *studio) showHelp() {
 func (studio *studio) showAbout() {
 	rosaline.Message(
 		"About Rosaline Studio",
-		"Rosaline Studio v0.1.3\n\nA pure-Go visual application designer built with Rosaline.\n\nGenerated code remains normal, readable Rosaline Go.",
+		"Rosaline Studio v0.1.5\n\nA pure-Go visual application designer built with Rosaline.\n\nGenerated code remains normal, readable Rosaline Go.",
 	)
 	studio.canvas.Focus()
 }

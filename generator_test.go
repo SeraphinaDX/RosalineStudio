@@ -74,6 +74,27 @@ func TestGeneratedApplicationUsesSeparateDirectory(t *testing.T) {
 	}
 }
 
+func TestGeneratedApplicationSetupDetection(t *testing.T) {
+	directory := t.TempDir()
+	if !generatedApplicationNeedsSetup(directory) {
+		t.Fatal("empty directory should require setup")
+	}
+	for _, name := range []string{"go.mod", "go.sum", "ui_generated.go"} {
+		if err := os.WriteFile(filepath.Join(directory, name), []byte("test\n"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if generatedApplicationNeedsSetup(directory) {
+		t.Fatal("prepared generated directory unexpectedly requires setup")
+	}
+	if err := os.Remove(filepath.Join(directory, "go.sum")); err != nil {
+		t.Fatal(err)
+	}
+	if !generatedApplicationNeedsSetup(directory) {
+		t.Fatal("missing dependency checksums should require setup")
+	}
+}
+
 func TestGeneratorRefusesToReplaceForeignGeneratedFile(t *testing.T) {
 	directory := t.TempDir()
 	foreign := filepath.Join(directory, "ui_generated.go")
@@ -156,10 +177,10 @@ func TestGeneratedApplicationBuilds(t *testing.T) {
 		t.Fatal(err)
 	}
 	goCommand := filepath.Join(runtime.GOROOT(), "bin", "go")
-	tidy := exec.Command(goCommand, "mod", "tidy")
-	tidy.Dir = directory
-	tidy.Env = append(os.Environ(), "CGO_ENABLED=0", "GOWORK=off")
-	if output, err := tidy.CombinedOutput(); err != nil {
+	download := exec.Command(goCommand, "mod", "tidy")
+	download.Dir = directory
+	download.Env = append(os.Environ(), "CGO_ENABLED=0", "GOWORK=off")
+	if output, err := download.CombinedOutput(); err != nil {
 		t.Fatalf("prepare generated application: %v\n%s", err, output)
 	}
 	command := exec.Command(goCommand, "test", ".")
