@@ -8,6 +8,8 @@ to read and extend.
 Rosaline Studio is itself a pure-Go Rosaline application. It builds with
 `CGO_ENABLED=0` and treats Linux as a first-class platform.
 
+![Screenshot](rosaline-studio.avif)
+
 ## What v0.1 can do
 
 - Add controls and layouts from a compact widget palette
