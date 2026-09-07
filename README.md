@@ -58,6 +58,11 @@ walkthrough.
 
 ## The generated project
 
+Each design generates into a separate folder beside its `.rosaline` file. A
+design named `greeting.rosaline` produces the Go application in `greeting/`, so
+running a design saved inside the Studio repository cannot launch Studio
+itself.
+
 Studio draws a hard line between generated and handwritten code:
 
 | File | Ownership | Regeneration behavior |
@@ -120,7 +125,7 @@ env CGO_ENABLED=0 ROSALINE_SOURCE=../Rosaline go test ./...
 
 ## Project status
 
-Rosaline Studio v0.1.2 is an intentionally small early release. Generated code
+Rosaline Studio v0.1.3 is an intentionally small early release. Generated code
 and saved designs are designed to stay understandable while the visual tooling
 grows. The design schema is versioned, but the Studio API and file format remain
 experimental until v1.0.

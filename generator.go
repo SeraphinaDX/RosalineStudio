@@ -32,6 +32,17 @@ type generationContext struct {
 	fields     []generatedField
 }
 
+func generatedApplicationDirectory(designPath string) string {
+	directory := filepath.Dir(designPath)
+	filename := filepath.Base(designPath)
+	name := strings.TrimSuffix(filename, filepath.Ext(filename))
+	name = strings.TrimSpace(name)
+	if name == "" || name == "." {
+		name = "rosaline-app"
+	}
+	return filepath.Join(directory, name)
+}
+
 func generateProject(project *designProject, directory string) (generationReport, error) {
 	var report generationReport
 	if err := project.validate(); err != nil {

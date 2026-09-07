@@ -659,14 +659,17 @@ func (studio *studio) generate() bool {
 	if !studio.save() {
 		return false
 	}
-	directory := filepath.Dir(studio.path)
+	directory := generatedApplicationDirectory(studio.path)
 	report, err := generateProject(studio.project, directory)
 	if err != nil {
 		rosaline.Error("Could not generate project", err.Error())
 		studio.status = "Generation failed"
 		return false
 	}
-	studio.status = fmt.Sprintf("Generated %d files; preserved %d developer files", len(report.Updated)+len(report.Created), len(report.Kept))
+	studio.runMu.Lock()
+	studio.runDirectory = directory
+	studio.runMu.Unlock()
+	studio.status = fmt.Sprintf("Generated %d files in %s; preserved %d developer files", len(report.Updated)+len(report.Created), filepath.Base(directory), len(report.Kept))
 	return true
 }
 
@@ -678,9 +681,6 @@ func (studio *studio) runGenerated() {
 	if !studio.generate() {
 		return
 	}
-	studio.runMu.Lock()
-	studio.runDirectory = filepath.Dir(studio.path)
-	studio.runMu.Unlock()
 	studio.status = "Starting generated application..."
 	studio.runTask.Start()
 }
@@ -715,7 +715,7 @@ func (studio *studio) showHelp() {
 func (studio *studio) showAbout() {
 	rosaline.Message(
 		"About Rosaline Studio",
-		"Rosaline Studio v0.1.2\n\nA pure-Go visual application designer built with Rosaline.\n\nGenerated code remains normal, readable Rosaline Go.",
+		"Rosaline Studio v0.1.3\n\nA pure-Go visual application designer built with Rosaline.\n\nGenerated code remains normal, readable Rosaline Go.",
 	)
 	studio.canvas.Focus()
 }

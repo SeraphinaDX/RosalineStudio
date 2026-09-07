@@ -52,18 +52,20 @@ Choose **Apply Application Settings**.
 Choose **File > Save As** and select an empty folder. Save the file as
 `greeting.rosaline`.
 
-Studio generates application files in the same folder as the design. Using one
-folder for each application keeps the design and its generated Go module
-together.
+Studio creates a separate application folder beside the design, named after
+the design file. For example, `greeting.rosaline` generates into `greeting/`.
+This keeps generated code isolated even when the design is saved inside the
+Rosaline Studio repository.
 
 ## 6. Generate and run
 
 Press F5, or choose **File > Build and Run**. Studio will:
 
 1. Save the design.
-2. Regenerate `ui_generated.go` and `state_generated.go`.
-3. Create the developer files that do not exist yet.
-4. Run the generated project with `CGO_ENABLED=0`.
+2. Create or update the application subfolder.
+3. Regenerate `ui_generated.go` and `state_generated.go`.
+4. Create the developer files that do not exist yet.
+5. Run that application subfolder with `CGO_ENABLED=0`.
 
 Close the generated application window to return to editing.
 
@@ -122,4 +124,3 @@ instead. Put business logic, files, networking, and custom behavior in
 | F1 | Quick help |
 
 On Linux and Windows, Primary is Control. On macOS, it is Command.
-

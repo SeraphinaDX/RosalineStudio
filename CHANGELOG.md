@@ -2,6 +2,16 @@
 
 All notable Rosaline Studio changes are documented here.
 
+## v0.1.3 - 2026-09-07
+
+- Fixed Build and Run launching Rosaline Studio when a design was saved in the
+  Studio repository.
+- Generate each design into a separate sibling subfolder named after the
+  `.rosaline` file.
+- Make Build and Run explicitly target that generated application folder.
+- Report the generated folder name in Studio's status line.
+- Added a regression test ensuring generation never reuses the design folder.
+
 ## v0.1.2 - 2026-09-07
 
 - Removed the nested scrolling viewport from the widget inspector, eliminating

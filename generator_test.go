@@ -55,6 +55,25 @@ func TestGenerateProjectCreatesParseableGoAndPreservesDeveloperFiles(t *testing.
 	}
 }
 
+func TestGeneratedApplicationUsesSeparateDirectory(t *testing.T) {
+	tests := []struct {
+		designPath string
+		want       string
+	}{
+		{filepath.Join("home", "studio", "greeting.rosaline"), filepath.Join("home", "studio", "greeting")},
+		{filepath.Join("projects", "My App.rosaline"), filepath.Join("projects", "My App")},
+		{filepath.Join("projects", ".rosaline"), filepath.Join("projects", "rosaline-app")},
+	}
+	for _, test := range tests {
+		if got := generatedApplicationDirectory(test.designPath); got != test.want {
+			t.Fatalf("generatedApplicationDirectory(%q): want %q, got %q", test.designPath, test.want, got)
+		}
+		if got := generatedApplicationDirectory(test.designPath); got == filepath.Dir(test.designPath) {
+			t.Fatalf("generated application reused design directory for %q", test.designPath)
+		}
+	}
+}
+
 func TestGeneratorRefusesToReplaceForeignGeneratedFile(t *testing.T) {
 	directory := t.TempDir()
 	foreign := filepath.Join(directory, "ui_generated.go")
