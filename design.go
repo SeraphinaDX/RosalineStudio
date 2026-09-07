@@ -115,13 +115,10 @@ func defaultNode(kind widgetKind, id string) *designNode {
 	switch kind {
 	case kindColumn, kindRow:
 		node.Padding = 8
-		node.Expand = true
 	case kindGrid:
 		node.Columns = 2
 		node.Padding = 8
-		node.Expand = true
 	case kindStack:
-		node.Expand = true
 	case kindCard:
 		node.Padding = 14
 	case kindScroll:

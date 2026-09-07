@@ -17,6 +17,55 @@ func TestPreviewContainsEveryDesignNode(t *testing.T) {
 	}
 }
 
+func TestPreviewUsesNaturalControlHeights(t *testing.T) {
+	project := newProject()
+	boxes := layoutPreview(project)
+	if boxes[1].Rect.Height > 32 {
+		t.Fatalf("label was stretched to %.1f pixels", boxes[1].Rect.Height)
+	}
+	if boxes[2].Rect.Height > 42 {
+		t.Fatalf("text box was stretched to %.1f pixels", boxes[2].Rect.Height)
+	}
+	if boxes[3].Rect.Height > 42 {
+		t.Fatalf("button was stretched to %.1f pixels", boxes[3].Rect.Height)
+	}
+	usedBottom := boxes[3].Rect.Y + boxes[3].Rect.Height
+	rootBottom := boxes[0].Rect.Y + boxes[0].Rect.Height
+	if rootBottom-usedBottom < 80 {
+		t.Fatal("natural controls unexpectedly consumed all vertical space")
+	}
+}
+
+func TestExpandedControlAbsorbsRemainingHeight(t *testing.T) {
+	project := newProject()
+	project.Root.Children = []*designNode{
+		{ID: "label", Kind: kindLabel, Text: "Notes"},
+		{ID: "notes", Kind: kindTextArea, Name: "Notes", Expand: true},
+		{ID: "save", Kind: kindButton, Text: "Save"},
+	}
+	boxes := layoutPreview(project)
+	if boxes[2].Rect.Height <= boxes[3].Rect.Height*2 {
+		t.Fatalf("expanded text area did not receive remaining height: %.1f versus %.1f", boxes[2].Rect.Height, boxes[3].Rect.Height)
+	}
+}
+
+func TestPreviewReflectsApplicationResolution(t *testing.T) {
+	project := newProject()
+	project.Width, project.Height = 1200, 400
+	wide := previewWindowBounds(project)
+	project.Width, project.Height = 400, 1000
+	tall := previewWindowBounds(project)
+	if wide.Width <= wide.Height {
+		t.Fatalf("wide resolution produced non-wide preview: %#v", wide)
+	}
+	if tall.Height <= tall.Width {
+		t.Fatalf("tall resolution produced non-tall preview: %#v", tall)
+	}
+	if wide == tall {
+		t.Fatal("changing resolution did not change the preview window")
+	}
+}
+
 func TestPreviewHitTestingPrefersDeepestWidget(t *testing.T) {
 	project := newProject()
 	boxes := layoutPreview(project)

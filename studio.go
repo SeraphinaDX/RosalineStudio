@@ -106,7 +106,7 @@ func (studio *studio) run() {
 
 	studio.canvas = rosaline.Canvas(func(canvas *rosaline.DrawingCanvas) {
 		drawPreview(canvas, studio.project, layoutPreview(studio.project), studio.selectedID)
-	}).Size(previewWidth, previewHeight).Expand().Focus()
+	}).Size(previewWidth, previewHeight).Focus()
 	studio.canvas.OnMouseDown(func(event rosaline.MouseEvent) {
 		if event.Button != rosaline.MouseLeft {
 			return
@@ -217,8 +217,8 @@ func (studio *studio) run() {
 
 	rosaline.RunApp(rosaline.App{
 		Title:          "Rosaline Studio - Untitled",
-		Width:          1420,
-		Height:         820,
+		Width:          1280,
+		Height:         760,
 		Padding:        12,
 		Theme:          theme,
 		Menu:           menu,
@@ -232,9 +232,9 @@ func (studio *studio) run() {
 				rosaline.LabelFunc(studio.documentName).Bold(),
 			).Gap(12),
 			rosaline.Row(
-				rosaline.Size(studio.buildPalettePanel(), 240, 680),
-				rosaline.Card(studio.canvas).Padding(6).Expand(),
-				rosaline.Size(studio.buildInspectorPanel(), 330, 680),
+				rosaline.Size(studio.buildPalettePanel(), 220, 610),
+				rosaline.Center(rosaline.Card(studio.canvas).Padding(5)),
+				rosaline.Size(studio.buildInspectorPanel(), 300, 610),
 			).Gap(10).Expand(),
 			rosaline.Row(
 				rosaline.LabelFunc(func() string { return studio.status }).Color(theme.Muted),
@@ -694,7 +694,7 @@ func (studio *studio) showHelp() {
 func (studio *studio) showAbout() {
 	rosaline.Message(
 		"About Rosaline Studio",
-		"Rosaline Studio v0.1.0\n\nA pure-Go visual application designer built with Rosaline.\n\nGenerated code remains normal, readable Rosaline Go.",
+		"Rosaline Studio v0.1.1\n\nA pure-Go visual application designer built with Rosaline.\n\nGenerated code remains normal, readable Rosaline Go.",
 	)
 	studio.canvas.Focus()
 }

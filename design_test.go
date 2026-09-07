@@ -95,3 +95,11 @@ func TestWelcomeExampleLoads(t *testing.T) {
 		t.Fatalf("unexpected welcome example: %#v", project)
 	}
 }
+
+func TestNewNestedLayoutsUseNaturalSize(t *testing.T) {
+	for _, kind := range []widgetKind{kindColumn, kindRow, kindGrid, kindStack} {
+		if node := defaultNode(kind, "test"); node.Expand {
+			t.Fatalf("new %s unexpectedly expands by default", kind)
+		}
+	}
+}

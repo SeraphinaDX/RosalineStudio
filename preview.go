@@ -11,8 +11,8 @@ import (
 )
 
 const (
-	previewWidth  = 700
-	previewHeight = 540
+	previewWidth  = 640
+	previewHeight = 500
 )
 
 type previewRect struct {
@@ -46,10 +46,39 @@ func layoutPreview(project *designProject) []previewBox {
 	if project == nil || project.Root == nil {
 		return nil
 	}
-	bounds := previewRect{X: 24, Y: 54, Width: previewWidth - 48, Height: previewHeight - 78}
+	bounds := previewContentBounds(project)
 	boxes := make([]previewBox, 0)
 	layoutPreviewNode(project.Root, bounds, 0, &boxes)
 	return boxes
+}
+
+func previewWindowBounds(project *designProject) previewRect {
+	available := previewRect{X: 18, Y: 16, Width: previewWidth - 36, Height: previewHeight - 48}
+	width, height := 720.0, 520.0
+	if project != nil {
+		width = float64(max(320, project.Width))
+		height = float64(max(240, project.Height))
+	}
+	scale := min(available.Width/width, available.Height/height)
+	width *= scale
+	height *= scale
+	return previewRect{
+		X:      available.X + (available.Width-width)/2,
+		Y:      available.Y + (available.Height-height)/2,
+		Width:  width,
+		Height: height,
+	}
+}
+
+func previewContentBounds(project *designProject) previewRect {
+	window := previewWindowBounds(project)
+	titleHeight := min(30.0, max(22.0, window.Height*0.065))
+	return previewRect{
+		X:      window.X + 6,
+		Y:      window.Y + titleHeight + 6,
+		Width:  max(1, window.Width-12),
+		Height: max(1, window.Height-titleHeight-12),
+	}
 }
 
 func layoutPreviewNode(node *designNode, bounds previewRect, depth int, boxes *[]previewBox) {
@@ -85,14 +114,10 @@ func layoutPreviewColumn(children []*designNode, bounds previewRect, gap float64
 	if len(children) == 0 {
 		return
 	}
-	available := max(1, bounds.Height-gap*float64(len(children)-1))
-	total := 0.0
-	for _, child := range children {
-		total += previewWeight(child, false)
-	}
+	sizes := previewLinearSizes(children, max(1, bounds.Height-gap*float64(len(children)-1)), false)
 	y := bounds.Y
-	for _, child := range children {
-		height := available * previewWeight(child, false) / total
+	for index, child := range children {
+		height := sizes[index]
 		layoutPreviewNode(child, previewRect{X: bounds.X, Y: y, Width: bounds.Width, Height: height}, depth, boxes)
 		y += height + gap
 	}
@@ -102,56 +127,167 @@ func layoutPreviewRow(children []*designNode, bounds previewRect, gap float64, d
 	if len(children) == 0 {
 		return
 	}
-	available := max(1, bounds.Width-gap*float64(len(children)-1))
-	total := 0.0
-	for _, child := range children {
-		total += previewWeight(child, true)
-	}
+	sizes := previewLinearSizes(children, max(1, bounds.Width-gap*float64(len(children)-1)), true)
 	x := bounds.X
-	for _, child := range children {
-		width := available * previewWeight(child, true) / total
+	for index, child := range children {
+		width := sizes[index]
 		layoutPreviewNode(child, previewRect{X: x, Y: bounds.Y, Width: width, Height: bounds.Height}, depth, boxes)
 		x += width + gap
 	}
 }
 
+func previewLinearSizes(children []*designNode, available float64, horizontal bool) []float64 {
+	sizes := make([]float64, len(children))
+	flexible := make([]int, 0, len(children))
+	total := 0.0
+	for index, child := range children {
+		sizes[index] = previewNaturalSize(child, horizontal)
+		total += sizes[index]
+		if child != nil && child.Expand {
+			flexible = append(flexible, index)
+		}
+	}
+	if total > available && total > 0 {
+		scale := available / total
+		for index := range sizes {
+			sizes[index] = max(8, sizes[index]*scale)
+		}
+		return sizes
+	}
+	if len(flexible) != 0 {
+		extra := (available - total) / float64(len(flexible))
+		for _, index := range flexible {
+			sizes[index] += extra
+		}
+	}
+	return sizes
+}
+
 func layoutPreviewGrid(node *designNode, bounds previewRect, gap float64, depth int, boxes *[]previewBox) {
 	columns := max(1, node.Columns)
 	rows := (len(node.Children) + columns - 1) / columns
+	if rows == 0 {
+		return
+	}
 	cellWidth := max(1, (bounds.Width-gap*float64(columns-1))/float64(columns))
-	cellHeight := max(1, (bounds.Height-gap*float64(rows-1))/float64(rows))
+	rowHeights := make([]float64, rows)
+	for index, child := range node.Children {
+		row := index / columns
+		rowHeights[row] = max(rowHeights[row], previewNaturalSize(child, false))
+	}
+	availableHeight := max(1, bounds.Height-gap*float64(rows-1))
+	totalHeight := 0.0
+	for _, height := range rowHeights {
+		totalHeight += height
+	}
+	if totalHeight > availableHeight && totalHeight > 0 {
+		scale := availableHeight / totalHeight
+		for row := range rowHeights {
+			rowHeights[row] = max(8, rowHeights[row]*scale)
+		}
+	} else if node.Expand {
+		extra := (availableHeight - totalHeight) / float64(rows)
+		for row := range rowHeights {
+			rowHeights[row] += extra
+		}
+	}
+	rowOffsets := make([]float64, rows)
+	for row := 1; row < rows; row++ {
+		rowOffsets[row] = rowOffsets[row-1] + rowHeights[row-1] + gap
+	}
 	for index, child := range node.Children {
 		column := index % columns
 		row := index / columns
 		rectangle := previewRect{
 			X:      bounds.X + float64(column)*(cellWidth+gap),
-			Y:      bounds.Y + float64(row)*(cellHeight+gap),
+			Y:      bounds.Y + rowOffsets[row],
 			Width:  cellWidth,
-			Height: cellHeight,
+			Height: rowHeights[row],
 		}
 		layoutPreviewNode(child, rectangle, depth, boxes)
 	}
 }
 
-func previewWeight(node *designNode, horizontal bool) float64 {
+func previewNaturalSize(node *designNode, horizontal bool) float64 {
 	if node == nil {
-		return 1
+		return 32
 	}
 	if horizontal && node.Width > 0 {
-		return max(0.4, float64(node.Width)/120)
+		return float64(node.Width)
 	}
 	if !horizontal && node.Height > 0 {
-		return max(0.4, float64(node.Height)/48)
+		return float64(node.Height)
+	}
+	if horizontal {
+		switch node.Kind {
+		case kindLabel:
+			return min(240, max(60, float64(len([]rune(node.Text))*7+18)))
+		case kindButton:
+			return min(220, max(84, float64(len([]rune(node.Text))*7+34)))
+		case kindCheckBox:
+			return min(240, max(130, float64(len([]rune(node.Text))*7+42)))
+		case kindSpacer:
+			return 24
+		case kindColumn, kindRow, kindGrid, kindStack, kindCard, kindScroll:
+			return 220
+		default:
+			return 180
+		}
 	}
 	switch node.Kind {
-	case kindTextArea, kindScroll, kindGrid, kindStack:
-		return 2.5
-	case kindColumn, kindRow, kindCard:
-		return 1.8
+	case kindLabel:
+		return 28
+	case kindButton, kindTextBox, kindCheckBox, kindComboBox, kindSlider, kindProgressBar:
+		return 38
+	case kindTextArea:
+		return 110
+	case kindScroll:
+		return 180
+	case kindColumn, kindRow, kindGrid, kindStack, kindCard:
+		return previewNaturalContainerHeight(node)
 	case kindSpacer:
-		return 0.55
+		return 24
 	default:
-		return 1
+		return 38
+	}
+}
+
+func previewNaturalContainerHeight(node *designNode) float64 {
+	if node == nil || len(node.Children) == 0 {
+		return 48
+	}
+	padding := float64(max(0, node.Padding)+5) * 2
+	gap := float64(max(0, node.Gap))
+	switch node.Kind {
+	case kindRow, kindStack:
+		height := 0.0
+		for _, child := range node.Children {
+			height = max(height, previewNaturalSize(child, false))
+		}
+		return min(260, max(48, height+padding))
+	case kindGrid:
+		columns := max(1, node.Columns)
+		rows := (len(node.Children) + columns - 1) / columns
+		height := 0.0
+		for row := 0; row < rows; row++ {
+			rowHeight := 0.0
+			for column := 0; column < columns; column++ {
+				index := row*columns + column
+				if index < len(node.Children) {
+					rowHeight = max(rowHeight, previewNaturalSize(node.Children[index], false))
+				}
+			}
+			height += rowHeight
+		}
+		return min(300, max(48, height+gap*float64(max(0, rows-1))+padding))
+	case kindCard:
+		return min(300, previewNaturalSize(node.Children[0], false)+padding)
+	default:
+		height := gap * float64(max(0, len(node.Children)-1))
+		for _, child := range node.Children {
+			height += previewNaturalSize(child, false)
+		}
+		return min(320, max(48, height+padding))
 	}
 }
 
@@ -216,16 +352,21 @@ func drawPreview(canvas *rosaline.DrawingCanvas, project *designProject, boxes [
 		return
 	}
 	colors := paletteFor(project.Theme)
-	canvas.FillRect(18, 18, previewWidth-36, previewHeight-30, colors.surface)
-	canvas.Rect(18, 18, previewWidth-36, previewHeight-30, 2, rosaline.Hex("#b78aa5"))
-	canvas.FillRect(18, 18, previewWidth-36, 30, colors.primary)
-	canvas.Text(project.Title, 30, 25, rosaline.TextStyle{Color: rosaline.White, Size: 13})
-	canvas.FillRect(24, 54, previewWidth-48, previewHeight-78, colors.background)
+	window := previewWindowBounds(project)
+	titleHeight := min(30.0, max(22.0, window.Height*0.065))
+	canvas.FillRect(window.X, window.Y, window.Width, window.Height, colors.surface)
+	canvas.Rect(window.X, window.Y, window.Width, window.Height, 2, rosaline.Hex("#b78aa5"))
+	canvas.FillRect(window.X, window.Y, window.Width, titleHeight, colors.primary)
+	canvas.Text(project.Title, window.X+10, window.Y+6, rosaline.TextStyle{Color: rosaline.White, Size: 12})
+	resolution := fmt.Sprintf("%d x %d", project.Width, project.Height)
+	canvas.Text(resolution, window.X+window.Width-float64(len(resolution)*7)-10, window.Y+6, rosaline.TextStyle{Color: rosaline.White, Size: 11})
+	content := previewContentBounds(project)
+	canvas.FillRect(content.X, content.Y, content.Width, content.Height, colors.background)
 
 	for _, box := range boxes {
 		drawPreviewNode(canvas, box, colors, box.Node.ID == selectedID)
 	}
-	canvas.Text("Click to select - drag onto another widget to move", 25, previewHeight-19, rosaline.TextStyle{Color: rosaline.Hex("#74586a"), Size: 11})
+	canvas.Text("Click to select - drag onto another widget to move", 18, previewHeight-16, rosaline.TextStyle{Color: rosaline.Hex("#74586a"), Size: 10})
 }
 
 func drawPreviewNode(canvas *rosaline.DrawingCanvas, box previewBox, colors previewPalette, selected bool) {
