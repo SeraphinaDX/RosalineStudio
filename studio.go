@@ -234,7 +234,7 @@ func (studio *studio) run() {
 			rosaline.Row(
 				rosaline.Size(studio.buildPalettePanel(), 220, 610),
 				rosaline.Center(rosaline.Card(studio.canvas).Padding(5)),
-				rosaline.Size(studio.buildInspectorPanel(), 300, 610),
+				rosaline.Size(studio.buildInspectorPanel(), 330, 610),
 			).Gap(10).Expand(),
 			rosaline.Row(
 				rosaline.LabelFunc(func() string { return studio.status }).Color(theme.Muted),
@@ -268,58 +268,79 @@ func (studio *studio) buildPalettePanel() rosaline.Widget {
 }
 
 func (studio *studio) buildInspectorPanel() rosaline.Widget {
-	widgetPanel := rosaline.Scroll(rosaline.Column(
-		rosaline.LabelFunc(func() string { return previewDescription(studio.project.find(studio.selectedID)) }).Bold(),
-		rosaline.Label("Text or placeholder"),
-		rosaline.TextBox(&studio.inspector.Text).Width(31),
-		rosaline.Label("State field name"),
-		rosaline.TextBox(&studio.inspector.Name).Width(31),
-		rosaline.Label("Button action name"),
-		rosaline.TextBox(&studio.inspector.Action).Width(31),
-		rosaline.Label("Options, separated by commas"),
-		rosaline.TextBox(&studio.inspector.Options).Width(31),
+	contentProperties := rosaline.Column(
+		inspectorField("Text or placeholder", rosaline.TextBox(&studio.inspector.Text).Width(24)),
+		inspectorField("State field name", rosaline.TextBox(&studio.inspector.Name).Width(24)),
+		inspectorField("Button action name", rosaline.TextBox(&studio.inspector.Action).Width(24)),
+		inspectorField("Comma-separated options", rosaline.TextBox(&studio.inspector.Options).Width(24)),
+	).Gap(8)
+
+	layoutProperties := rosaline.Column(
 		rosaline.Grid(2,
-			rosaline.Column(rosaline.Label("Gap"), rosaline.TextBox(&studio.inspector.Gap).Width(10)).Gap(3),
-			rosaline.Column(rosaline.Label("Padding"), rosaline.TextBox(&studio.inspector.Padding).Width(10)).Gap(3),
-			rosaline.Column(rosaline.Label("Grid columns"), rosaline.TextBox(&studio.inspector.Columns).Width(10)).Gap(3),
-			rosaline.Column(rosaline.Label("Width"), rosaline.TextBox(&studio.inspector.Width).Width(10)).Gap(3),
-			rosaline.Column(rosaline.Label("Height"), rosaline.TextBox(&studio.inspector.Height).Width(10)).Gap(3),
-			rosaline.Column(rosaline.Label("Minimum"), rosaline.TextBox(&studio.inspector.Minimum).Width(10)).Gap(3),
-			rosaline.Column(rosaline.Label("Maximum"), rosaline.TextBox(&studio.inspector.Maximum).Width(10)).Gap(3),
-			rosaline.Column(rosaline.Label("Step"), rosaline.TextBox(&studio.inspector.Step).Width(10)).Gap(3),
-		).Gap(5),
-		rosaline.CheckBox("Expand", &studio.inspector.Expand),
+			inspectorField("Gap", rosaline.TextBox(&studio.inspector.Gap).Width(8)),
+			inspectorField("Padding", rosaline.TextBox(&studio.inspector.Padding).Width(8)),
+			inspectorField("Grid columns", rosaline.TextBox(&studio.inspector.Columns).Width(8)),
+			inspectorField("Width", rosaline.TextBox(&studio.inspector.Width).Width(8)),
+			inspectorField("Height", rosaline.TextBox(&studio.inspector.Height).Width(8)),
+			inspectorField("Minimum", rosaline.TextBox(&studio.inspector.Minimum).Width(8)),
+			inspectorField("Maximum", rosaline.TextBox(&studio.inspector.Maximum).Width(8)),
+			inspectorField("Step", rosaline.TextBox(&studio.inspector.Step).Width(8)),
+		).Gap(8),
+		rosaline.CheckBox("Use available space", &studio.inspector.Expand),
+	).Gap(10)
+
+	styleProperties := rosaline.Column(
 		rosaline.CheckBox("Primary button", &studio.inspector.Primary),
 		rosaline.CheckBox("Bold label", &studio.inspector.Bold),
 		rosaline.CheckBox("Password input", &studio.inspector.Password),
 		rosaline.CheckBox("Vertical slider or progress", &studio.inspector.Vertical),
-		rosaline.Button("Apply Widget Properties", studio.applyInspector).Primary(),
-		rosaline.Label("Only properties supported by the selected widget are generated.").Color(rosaline.DefaultTheme.Muted),
-	).Gap(5)).Size(295, 590).Expand()
+	).Gap(8)
+
+	widgetPanel := rosaline.Column(
+		rosaline.LabelFunc(func() string { return previewDescription(studio.project.find(studio.selectedID)) }).Bold(),
+		rosaline.Tabs(
+			rosaline.Tab("Content", contentProperties),
+			rosaline.Tab("Layout", layoutProperties),
+			rosaline.Tab("Style", styleProperties),
+		).Expand(),
+		compactInspectorWidget(rosaline.Button("Apply Properties", studio.applyInspector).Primary()),
+		rosaline.Label("Unsupported properties are ignored.").Color(rosaline.DefaultTheme.Muted),
+	).Gap(8).Expand()
 
 	projectPanel := rosaline.Column(
 		rosaline.Label("Application Settings").Bold(),
-		rosaline.Label("Window title"),
-		rosaline.TextBox(&studio.settings.Title).Width(31),
-		rosaline.Label("Go module path"),
-		rosaline.TextBox(&studio.settings.Module).Width(31),
+		inspectorField("Window title", rosaline.TextBox(&studio.settings.Title).Width(24)),
+		inspectorField("Go module path", rosaline.TextBox(&studio.settings.Module).Width(24)),
 		rosaline.Grid(2,
-			rosaline.Column(rosaline.Label("Width"), rosaline.TextBox(&studio.settings.Width).Width(10)).Gap(3),
-			rosaline.Column(rosaline.Label("Height"), rosaline.TextBox(&studio.settings.Height).Width(10)).Gap(3),
-			rosaline.Column(rosaline.Label("Window padding"), rosaline.TextBox(&studio.settings.Padding).Width(10)).Gap(3),
-		).Gap(5),
+			inspectorField("Width", rosaline.TextBox(&studio.settings.Width).Width(8)),
+			inspectorField("Height", rosaline.TextBox(&studio.settings.Height).Width(8)),
+			inspectorField("Window padding", rosaline.TextBox(&studio.settings.Padding).Width(8)),
+		).Gap(8),
 		rosaline.Label("Theme"),
-		rosaline.ComboBox(&studio.settings.Theme, "Rosaline", "Lavender", "Midnight").Width(28),
-		rosaline.Button("Apply Application Settings", studio.applyProjectInspector).Primary(),
+		compactInspectorWidget(rosaline.ComboBox(&studio.settings.Theme, "Rosaline", "Lavender", "Midnight").Width(22)),
+		compactInspectorWidget(rosaline.Button("Apply Application Settings", studio.applyProjectInspector).Primary()),
 		rosaline.Separator(),
 		rosaline.Label("Generated-file safety").Bold(),
-		rosaline.Label("Studio replaces ui_generated.go and state_generated.go. It creates main.go, handlers.go, go.mod, and README.md only when they do not already exist."),
-	).Gap(6)
+		rosaline.Label("Studio regenerates only:"),
+		rosaline.Label("ui_generated.go and state_generated.go"),
+		rosaline.Label("Your other files are preserved.").Color(rosaline.DefaultTheme.Muted),
+	).Gap(8)
 
 	return rosaline.Tabs(
 		rosaline.Tab("Widget", widgetPanel),
 		rosaline.Tab("Application", projectPanel),
 	).Expand()
+}
+
+func inspectorField(label string, field rosaline.Widget) rosaline.Widget {
+	return rosaline.Column(
+		rosaline.Label(label),
+		compactInspectorWidget(field),
+	).Gap(3)
+}
+
+func compactInspectorWidget(widget rosaline.Widget) rosaline.Widget {
+	return rosaline.Align(widget, rosaline.AlignStart, rosaline.AlignStart)
 }
 
 func (studio *studio) selectNode(id string) {
@@ -694,7 +715,7 @@ func (studio *studio) showHelp() {
 func (studio *studio) showAbout() {
 	rosaline.Message(
 		"About Rosaline Studio",
-		"Rosaline Studio v0.1.1\n\nA pure-Go visual application designer built with Rosaline.\n\nGenerated code remains normal, readable Rosaline Go.",
+		"Rosaline Studio v0.1.2\n\nA pure-Go visual application designer built with Rosaline.\n\nGenerated code remains normal, readable Rosaline Go.",
 	)
 	studio.canvas.Focus()
 }

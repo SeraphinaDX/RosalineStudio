@@ -2,6 +2,16 @@
 
 All notable Rosaline Studio changes are documented here.
 
+## v0.1.2 - 2026-09-07
+
+- Removed the nested scrolling viewport from the widget inspector, eliminating
+  its unnecessary horizontal scrollbar.
+- Split widget properties into compact Content, Layout, and Style tabs.
+- Kept inspector fields, selectors, and action buttons at natural widths
+  instead of stretching them across the panel.
+- Shortened the generated-file safety explanation so it fits naturally.
+- Slightly widened the inspector panel without changing Rosaline itself.
+
 ## v0.1.1 - 2026-09-07
 
 - Fixed labels, text boxes, buttons, and other ordinary controls stretching to
