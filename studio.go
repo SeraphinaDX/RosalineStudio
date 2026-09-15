@@ -20,7 +20,7 @@ import (
 type inspectorState struct {
 	Text     string
 	Name     string
-	Action   string
+	Asset    string
 	Options  string
 	Gap      string
 	Padding  string
@@ -56,12 +56,22 @@ type studio struct {
 	inspector inspectorState
 	settings  projectInspectorState
 
-	palette  *rosaline.ListWidget
-	tree     *rosaline.TreeWidget
-	canvas   *rosaline.CanvasWidget
-	treeByID map[string]*rosaline.TreeNode
-	syncTree bool
-	dragID   string
+	palette    *rosaline.ListWidget
+	tree       *rosaline.TreeWidget
+	canvas     *rosaline.CanvasWidget
+	workspace  *rosaline.TabsWidget
+	codeEditor *rosaline.TextAreaWidget
+	eventList  *rosaline.ListWidget
+	treeByID   map[string]*rosaline.TreeNode
+	syncTree   bool
+	dragID     string
+
+	availableEvents []eventSpec
+	selectedEvent   int
+	eventHandler    string
+	codeHandler     string
+	codeBody        string
+	previewPictures map[string]*rosaline.Picture
 
 	undo [][]byte
 	redo [][]byte
@@ -75,9 +85,11 @@ type studio struct {
 func newStudio() *studio {
 	project := newProject()
 	result := &studio{
-		project:    project,
-		selectedID: project.Root.ID,
-		status:     "Ready - double-click a palette item to add it",
+		project:         project,
+		selectedID:      project.Root.ID,
+		status:          "Ready - double-click a palette item to add it",
+		selectedEvent:   -1,
+		previewPictures: make(map[string]*rosaline.Picture),
 	}
 	result.loadInspector()
 	result.loadProjectInspector()
@@ -105,7 +117,7 @@ func (studio *studio) run() {
 	})
 
 	studio.canvas = rosaline.Canvas(func(canvas *rosaline.DrawingCanvas) {
-		drawPreview(canvas, studio.project, layoutPreview(studio.project), studio.selectedID)
+		drawPreview(canvas, studio.project, layoutPreview(studio.project), studio.selectedID, studio.previewPicture)
 	}).Size(previewWidth, previewHeight).Focus()
 	studio.canvas.OnMouseDown(func(event rosaline.MouseEvent) {
 		if event.Button != rosaline.MouseLeft {
@@ -133,6 +145,25 @@ func (studio *studio) run() {
 		}
 		studio.commitChange(before, "Moved "+dragged)
 	})
+	studio.canvas.OnDoubleClick(func(event rosaline.MouseEvent) {
+		studio.dragID = ""
+		node := previewBoxAt(layoutPreview(studio.project), event.X, event.Y)
+		if node == nil {
+			return
+		}
+		studio.selectNode(node.ID)
+		studio.editDefaultEvent()
+	})
+
+	studio.eventList = rosaline.List().Size(28, 6)
+	studio.eventList.OnSelect(func(index int, _ string) {
+		studio.selectEvent(index)
+	}).OnActivate(func(index int, _ string) {
+		studio.selectEvent(index)
+		studio.editSelectedEvent()
+	})
+	studio.codeEditor = rosaline.TextArea(&studio.codeBody).Size(72, 28).Expand()
+	studio.loadEvents()
 
 	studio.runTask = rosaline.Background(func(ctx context.Context, report *rosaline.TaskReporter) error {
 		studio.runMu.Lock()
@@ -244,13 +275,13 @@ func (studio *studio) run() {
 		Content: rosaline.Column(
 			rosaline.Row(
 				rosaline.Label("ROSALINE STUDIO").Bold().FontSize(19).Color(theme.Primary),
-				rosaline.Label("Visual Go application designer").Color(theme.Muted),
+				rosaline.Label("Visual Go RAD environment").Color(theme.Muted),
 				rosaline.Spring(),
 				rosaline.LabelFunc(studio.documentName).Bold(),
 			).Gap(12),
 			rosaline.Row(
 				rosaline.Size(studio.buildPalettePanel(), 220, 610),
-				rosaline.Center(rosaline.Card(studio.canvas).Padding(5)),
+				studio.buildWorkspace(),
 				rosaline.Size(studio.buildInspectorPanel(), 330, 610),
 			).Gap(10).Expand(),
 			rosaline.Row(
@@ -301,11 +332,33 @@ func (studio *studio) buildPalettePanel() rosaline.Widget {
 	).Gap(7).Expand()
 }
 
+func (studio *studio) buildWorkspace() rosaline.Widget {
+	form := rosaline.Center(rosaline.Card(studio.canvas).Padding(5))
+	code := rosaline.Column(
+		rosaline.LabelFunc(studio.codeHeader).Bold().Color(rosaline.Rose),
+		rosaline.Label("Write the body of this Go event method. The app and rosaline names are ready to use.").Color(rosaline.DefaultTheme.Muted),
+		studio.codeEditor,
+		rosaline.Row(
+			rosaline.Button("Save Event Code", func() { studio.saveOpenHandler() }).Primary(),
+			rosaline.Button("Back to Form", studio.showDesigner),
+		).Gap(8),
+	).Gap(8).Expand()
+	studio.workspace = rosaline.Tabs(
+		rosaline.Tab("Form", form),
+		rosaline.Tab("Code", code),
+	).Expand()
+	return rosaline.Card(studio.workspace).Padding(5).Expand()
+}
+
 func (studio *studio) buildInspectorPanel() rosaline.Widget {
 	contentProperties := rosaline.Column(
 		inspectorField("Text or placeholder", rosaline.TextBox(&studio.inspector.Text).Width(24)),
 		inspectorField("State field name", rosaline.TextBox(&studio.inspector.Name).Width(24)),
-		inspectorField("Button action name", rosaline.TextBox(&studio.inspector.Action).Width(24)),
+		inspectorField("Image asset", rosaline.LabelFunc(func() string { return defaultText(studio.inspector.Asset, "No image selected") }).Color(rosaline.DefaultTheme.Muted)),
+		rosaline.Row(
+			rosaline.Button("Choose Image...", studio.chooseImage),
+			rosaline.Button("Clear", studio.clearImage),
+		).Gap(6),
 		inspectorField("Comma-separated options", rosaline.TextBox(&studio.inspector.Options).Width(24)),
 	).Gap(8)
 
@@ -356,12 +409,26 @@ func (studio *studio) buildInspectorPanel() rosaline.Widget {
 		rosaline.Separator(),
 		rosaline.Label("Generated-file safety").Bold(),
 		rosaline.Label("Studio regenerates only:"),
-		rosaline.Label("ui_generated.go and state_generated.go"),
+		rosaline.Label("ui, state, and events _generated.go files"),
 		rosaline.Label("Your other files are preserved.").Color(rosaline.DefaultTheme.Muted),
 	).Gap(8)
 
+	eventPanel := rosaline.Column(
+		rosaline.LabelFunc(func() string { return previewDescription(studio.project.find(studio.selectedID)) }).Bold(),
+		rosaline.Label("Available events").Color(rosaline.DefaultTheme.Muted),
+		studio.eventList,
+		rosaline.LabelFunc(studio.selectedEventDescription).Color(rosaline.DefaultTheme.Muted),
+		inspectorField("Handler method", rosaline.TextBox(&studio.eventHandler).Width(24)),
+		rosaline.Row(
+			rosaline.Button("Assign and Edit", studio.editSelectedEvent).Primary(),
+			rosaline.Button("Clear", studio.clearSelectedEvent),
+		).Gap(6),
+		rosaline.Label("Double-click a form control to edit its default event.").Color(rosaline.DefaultTheme.Muted),
+	).Gap(8)
+
 	return rosaline.Tabs(
-		rosaline.Tab("Widget", widgetPanel),
+		rosaline.Tab("Properties", widgetPanel),
+		rosaline.Tab("Events", eventPanel),
 		rosaline.Tab("Application", projectPanel),
 	).Expand()
 }
@@ -383,10 +450,259 @@ func (studio *studio) selectNode(id string) {
 	}
 	studio.selectedID = id
 	studio.loadInspector()
+	studio.loadEvents()
 	studio.syncTreeSelection()
 	if studio.canvas != nil {
 		studio.canvas.Redraw()
 	}
+}
+
+func (studio *studio) loadEvents() {
+	node := studio.project.find(studio.selectedID)
+	studio.availableEvents = nil
+	studio.selectedEvent = -1
+	studio.eventHandler = ""
+	if node != nil {
+		studio.availableEvents = eventSpecsFor(node.Kind)
+	}
+	items := make([]string, 0, len(studio.availableEvents))
+	for _, event := range studio.availableEvents {
+		label := event.Name
+		if handler := eventHandler(node, event.Name); handler != "" {
+			label += "  -  " + handler
+		}
+		items = append(items, label)
+	}
+	if len(studio.availableEvents) != 0 {
+		studio.selectedEvent = 0
+		studio.eventHandler = eventHandler(node, studio.availableEvents[0].Name)
+	}
+	if studio.eventList != nil {
+		studio.eventList.SetItems(items...)
+		if len(items) != 0 {
+			studio.eventList.Select(0)
+		}
+	}
+}
+
+func (studio *studio) selectEvent(index int) {
+	if index < 0 || index >= len(studio.availableEvents) {
+		studio.selectedEvent = -1
+		studio.eventHandler = ""
+		return
+	}
+	studio.selectedEvent = index
+	node := studio.project.find(studio.selectedID)
+	studio.eventHandler = eventHandler(node, studio.availableEvents[index].Name)
+}
+
+func (studio *studio) selectedEventDescription() string {
+	if studio.selectedEvent < 0 || studio.selectedEvent >= len(studio.availableEvents) {
+		return "This control has no editable events yet."
+	}
+	return studio.availableEvents[studio.selectedEvent].Description
+}
+
+func (studio *studio) editDefaultEvent() {
+	if len(studio.availableEvents) == 0 {
+		studio.status = "The selected control has no editable events"
+		return
+	}
+	studio.selectedEvent = 0
+	studio.eventHandler = eventHandler(studio.project.find(studio.selectedID), studio.availableEvents[0].Name)
+	if studio.eventList != nil {
+		studio.eventList.Select(0)
+	}
+	studio.editSelectedEvent()
+}
+
+func (studio *studio) editSelectedEvent() {
+	if studio.selectedEvent < 0 || studio.selectedEvent >= len(studio.availableEvents) {
+		studio.status = "Select an event first"
+		return
+	}
+	node := studio.project.find(studio.selectedID)
+	if node == nil {
+		return
+	}
+	event := studio.availableEvents[studio.selectedEvent].Name
+	handler := strings.TrimSpace(studio.eventHandler)
+	if handler == "" {
+		handler = defaultHandlerName(node, event)
+	}
+	if !validHandlerName(handler) {
+		studio.status = "Handler names must be valid Go identifiers"
+		return
+	}
+	if !studio.confirmOpenHandler(handler) {
+		return
+	}
+	if handler == studio.codeHandler && eventHandler(node, event) == handler && studio.codeEditor.Modified() {
+		if studio.workspace != nil {
+			studio.workspace.Select(1)
+		}
+		studio.codeEditor.Focus()
+		return
+	}
+	before := designSnapshot(studio.project)
+	changed := eventHandler(node, event) != handler
+	setEventHandler(node, event, handler)
+	if studio.project.Handlers == nil {
+		studio.project.Handlers = make(map[string]string)
+	}
+	if _, exists := studio.project.Handlers[handler]; !exists {
+		studio.project.Handlers[handler] = defaultHandlerBody(node, event)
+		changed = true
+	}
+	if changed {
+		studio.commitChange(before, "Assigned "+event+" to "+handler)
+	}
+	studio.codeHandler = handler
+	studio.codeBody = studio.project.Handlers[handler]
+	studio.eventHandler = handler
+	studio.codeEditor.SetText(studio.codeBody)
+	studio.codeEditor.MarkSaved()
+	if studio.workspace != nil {
+		studio.workspace.Select(1)
+	}
+	studio.codeEditor.Focus()
+	studio.status = "Editing " + handler
+}
+
+func (studio *studio) clearSelectedEvent() {
+	if studio.selectedEvent < 0 || studio.selectedEvent >= len(studio.availableEvents) {
+		studio.status = "Select an event first"
+		return
+	}
+	node := studio.project.find(studio.selectedID)
+	event := studio.availableEvents[studio.selectedEvent].Name
+	if eventHandler(node, event) == "" {
+		studio.status = event + " is already empty"
+		return
+	}
+	before := designSnapshot(studio.project)
+	setEventHandler(node, event, "")
+	studio.commitChange(before, "Cleared "+event)
+}
+
+func (studio *studio) saveOpenHandler() bool {
+	if studio.codeHandler == "" || studio.codeEditor == nil {
+		return true
+	}
+	if err := validateHandler(studio.codeHandler, studio.codeBody); err != nil {
+		rosaline.Error("Invalid event code", err.Error())
+		studio.status = "Event code has a Go syntax error"
+		return false
+	}
+	if studio.project.Handlers[studio.codeHandler] != studio.codeBody {
+		before := designSnapshot(studio.project)
+		studio.project.Handlers[studio.codeHandler] = studio.codeBody
+		studio.commitChange(before, "Saved event "+studio.codeHandler)
+	} else {
+		studio.status = "Event code is already saved"
+	}
+	studio.codeEditor.MarkSaved()
+	return true
+}
+
+func (studio *studio) confirmOpenHandler(next string) bool {
+	if studio.codeEditor == nil || !studio.codeEditor.Modified() || studio.codeHandler == "" || studio.codeHandler == next {
+		return true
+	}
+	switch rosaline.AskSaveChanges("Unsaved event code", "Save changes to "+studio.codeHandler+"?") {
+	case rosaline.SaveChanges:
+		return studio.saveOpenHandler()
+	case rosaline.DiscardChanges:
+		studio.codeBody = studio.project.Handlers[studio.codeHandler]
+		studio.codeEditor.SetText(studio.codeBody)
+		studio.codeEditor.MarkSaved()
+		return true
+	default:
+		return false
+	}
+}
+
+func (studio *studio) showDesigner() {
+	if !studio.confirmOpenHandler("") {
+		return
+	}
+	if studio.workspace != nil {
+		studio.workspace.Select(0)
+	}
+	studio.canvas.Focus()
+}
+
+func (studio *studio) codeHeader() string {
+	if studio.codeHandler == "" {
+		return "No event handler selected"
+	}
+	return "func (app *Application) " + studio.codeHandler + "()"
+}
+
+func (studio *studio) chooseImage() {
+	node := studio.project.find(studio.selectedID)
+	if node == nil || node.Kind != kindImage {
+		studio.status = "Select an Image control first"
+		return
+	}
+	if studio.path == "" && !studio.saveAs() {
+		return
+	}
+	path, ok := rosaline.OpenFileDialog(rosaline.FileDialogOptions{
+		Title: "Choose Image",
+		Filters: []rosaline.FileFilter{
+			{Name: "Images", Extensions: []string{".png", ".jpg", ".jpeg", ".gif", ".bmp", ".tif", ".tiff", ".webp", ".avif"}},
+			{Name: "All files", Extensions: []string{"*"}},
+		},
+	})
+	if !ok {
+		return
+	}
+	asset, picture, err := importImageAsset(path, studio.path)
+	if err != nil {
+		rosaline.Error("Could not import image", err.Error())
+		studio.status = "Image import failed"
+		return
+	}
+	before := designSnapshot(studio.project)
+	node.Asset = asset
+	if node.Width <= 0 || node.Height <= 0 {
+		node.Width = min(480, max(80, picture.Width()))
+		node.Height = min(320, max(60, picture.Height()))
+	}
+	studio.previewPictures[asset] = picture
+	studio.commitChange(before, "Imported "+filepath.Base(path))
+}
+
+func (studio *studio) clearImage() {
+	node := studio.project.find(studio.selectedID)
+	if node == nil || node.Kind != kindImage {
+		studio.status = "Select an Image control first"
+		return
+	}
+	if node.Asset == "" {
+		studio.status = "The image is already empty"
+		return
+	}
+	before := designSnapshot(studio.project)
+	delete(studio.previewPictures, node.Asset)
+	node.Asset = ""
+	studio.commitChange(before, "Cleared image")
+}
+
+func (studio *studio) previewPicture(asset string) *rosaline.Picture {
+	if asset == "" || studio.path == "" {
+		return nil
+	}
+	if picture := studio.previewPictures[asset]; picture != nil {
+		return picture
+	}
+	picture, err := rosaline.LoadImage(filepath.Join(designAssetDirectory(studio.path), asset))
+	if err != nil {
+		return nil
+	}
+	studio.previewPictures[asset] = picture
+	return picture
 }
 
 func (studio *studio) addWidget(kind widgetKind) {
@@ -431,7 +747,6 @@ func (studio *studio) applyInspector() {
 	before := designSnapshot(studio.project)
 	node.Text = studio.inspector.Text
 	node.Name = studio.inspector.Name
-	node.Action = studio.inspector.Action
 	node.Options = splitOptions(studio.inspector.Options)
 	node.Gap = parseInteger(studio.inspector.Gap, node.Gap)
 	node.Padding = parseInteger(studio.inspector.Padding, node.Padding)
@@ -522,6 +837,7 @@ func (studio *studio) redoChange() {
 func (studio *studio) refreshDesign() {
 	studio.ensureSelection()
 	studio.loadInspector()
+	studio.loadEvents()
 	studio.rebuildTree()
 	if studio.canvas != nil {
 		studio.canvas.Redraw()
@@ -578,7 +894,7 @@ func (studio *studio) loadInspector() {
 		return
 	}
 	studio.inspector = inspectorState{
-		Text: node.Text, Name: node.Name, Action: node.Action,
+		Text: node.Text, Name: node.Name, Asset: node.Asset,
 		Options: strings.Join(node.Options, ", "),
 		Gap:     strconv.Itoa(node.Gap), Padding: strconv.Itoa(node.Padding),
 		Columns: strconv.Itoa(max(1, node.Columns)), Width: strconv.Itoa(node.Width), Height: strconv.Itoa(node.Height),
@@ -605,6 +921,12 @@ func (studio *studio) newDesign() {
 	studio.selectedID = studio.project.Root.ID
 	studio.undo, studio.redo = nil, nil
 	studio.dirty = false
+	studio.codeHandler, studio.codeBody = "", ""
+	studio.previewPictures = make(map[string]*rosaline.Picture)
+	if studio.codeEditor != nil {
+		studio.codeEditor.SetText("")
+		studio.codeEditor.MarkSaved()
+	}
 	studio.status = "Created a new design"
 	studio.loadProjectInspector()
 	studio.refreshDesign()
@@ -634,12 +956,21 @@ func (studio *studio) openDesign() {
 	studio.selectedID = project.Root.ID
 	studio.undo, studio.redo = nil, nil
 	studio.dirty = false
+	studio.codeHandler, studio.codeBody = "", ""
+	studio.previewPictures = make(map[string]*rosaline.Picture)
+	if studio.codeEditor != nil {
+		studio.codeEditor.SetText("")
+		studio.codeEditor.MarkSaved()
+	}
 	studio.status = "Opened " + filepath.Base(path)
 	studio.loadProjectInspector()
 	studio.refreshDesign()
 }
 
 func (studio *studio) save() bool {
+	if studio.codeEditor != nil && studio.codeEditor.Modified() && !studio.saveOpenHandler() {
+		return false
+	}
 	if studio.path == "" {
 		return studio.saveAs()
 	}
@@ -667,7 +998,12 @@ func (studio *studio) saveAs() bool {
 		return false
 	}
 	oldPath := studio.path
+	if err := copyDesignAssets(studio.project, oldPath, path); err != nil {
+		rosaline.Error("Could not copy design assets", err.Error())
+		return false
+	}
 	studio.path = path
+	studio.previewPictures = make(map[string]*rosaline.Picture)
 	if !studio.save() {
 		studio.path = oldPath
 		return false
@@ -676,6 +1012,9 @@ func (studio *studio) saveAs() bool {
 }
 
 func (studio *studio) confirmChanges(action string) bool {
+	if studio.codeEditor != nil && studio.codeEditor.Modified() && !studio.confirmOpenHandler("") {
+		return false
+	}
 	if !studio.dirty {
 		return true
 	}
@@ -758,7 +1097,7 @@ func (studio *studio) documentName() string {
 func (studio *studio) showHelp() {
 	rosaline.Message(
 		"Rosaline Studio Quick Help",
-		"1. Select a container in the hierarchy.\n2. Double-click a palette item to add it.\n3. Select widgets in the preview or hierarchy.\n4. Edit properties and choose Apply.\n5. Drag a preview widget onto a container or sibling to move it.\n6. Save, then press F5 to generate and run.\n\nStudio never overwrites handlers.go, main.go, go.mod, or README.md.",
+		"1. Select a container in the hierarchy.\n2. Double-click a palette item to add it.\n3. Select controls in the Form or hierarchy.\n4. Edit values in Properties and choose Apply.\n5. Use Events to assign a handler, or double-click a form control.\n6. Write the handler body in Code and save it.\n7. Add Image controls and choose picture files in Properties.\n8. Press F5 to generate and run.\n\nStudio never overwrites handlers.go, main.go, go.mod, or README.md.",
 	)
 	studio.canvas.Focus()
 }
@@ -766,7 +1105,7 @@ func (studio *studio) showHelp() {
 func (studio *studio) showAbout() {
 	rosaline.Message(
 		"About Rosaline Studio",
-		"Rosaline Studio v0.1.5\n\nA pure-Go visual application designer built with Rosaline.\n\nGenerated code remains normal, readable Rosaline Go.",
+		"Rosaline Studio v0.2.0\n\nA pure-Go Lazarus-style RAD environment built with Rosaline.\n\nGenerated code remains normal, readable Rosaline Go.",
 	)
 	studio.canvas.Focus()
 }

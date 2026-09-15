@@ -66,8 +66,9 @@ func generateProject(project *designProject, directory string) (generationReport
 
 	context := makeGenerationContext(project)
 	generated := map[string]string{
-		"ui_generated.go":    generatedUI(project, context),
-		"state_generated.go": generatedState(context),
+		"ui_generated.go":     generatedUI(project, context),
+		"state_generated.go":  generatedState(context),
+		"events_generated.go": generatedEvents(project),
 	}
 	for name, contents := range generated {
 		formatted, err := format.Source([]byte(contents))
@@ -85,6 +86,12 @@ func generateProject(project *designProject, directory string) (generationReport
 			report.Created = append(report.Created, name)
 		}
 	}
+	createdAssets, updatedAssets, err := copyProjectAssets(project, directory)
+	if err != nil {
+		return report, err
+	}
+	report.Created = append(report.Created, createdAssets...)
+	report.Updated = append(report.Updated, updatedAssets...)
 
 	protected := map[string]string{
 		"go.mod":      generatedGoMod(project),
@@ -218,11 +225,28 @@ func exportedIdentifier(value string) string {
 }
 
 func generatedUI(project *designProject, context *generationContext) string {
+	imports := fmt.Sprintf("import rosaline %q\n", rosalineModule)
+	assetSupport := ""
+	if len(projectAssets(project)) != 0 {
+		imports = fmt.Sprintf("import (\n\t\"embed\"\n\n\trosaline %q\n)\n", rosalineModule)
+		assetSupport = `//go:embed assets/*
+var generatedAssets embed.FS
+
+func generatedPicture(name string) *rosaline.Picture {
+	picture, err := rosaline.LoadImageFS(generatedAssets, "assets/"+name)
+	if err != nil {
+		return nil
+	}
+	return picture
+}
+
+`
+	}
 	return fmt.Sprintf(`// %s
 package main
 
-import rosaline %q
-
+%s
+%s
 func runGeneratedApplication(app *Application) {
 	rosaline.RunApp(rosaline.App{
 		Title: %q,
@@ -239,7 +263,7 @@ func buildUI(app *Application) rosaline.Widget {
 }
 
 %s
-`, generatedMarker, rosalineModule, project.Title, max(320, project.Width), max(240, project.Height), max(0, project.Padding), generateNode(project.Root, context, 1), generatedTheme(project.Theme))
+`, generatedMarker, imports, assetSupport, project.Title, max(320, project.Width), max(240, project.Height), max(0, project.Padding), generateNode(project.Root, context, 1), generatedTheme(project.Theme))
 }
 
 func generatedState(context *generationContext) string {
@@ -256,6 +280,66 @@ type UIState struct {
 `, generatedMarker, fields.String())
 }
 
+func generatedEvents(project *designProject) string {
+	handlers := referencedHandlers(project)
+	if len(handlers) == 0 {
+		return fmt.Sprintf("// %s\npackage main\n", generatedMarker)
+	}
+	var methods strings.Builder
+	for _, name := range handlers {
+		body := strings.TrimSpace(project.Handlers[name])
+		if body == "" {
+			body = "// Add your event code in Rosaline Studio."
+		}
+		fmt.Fprintf(&methods, "func (app *Application) %s() {\n%s\n}\n\n", name, indentBody(body, "\t"))
+	}
+	return fmt.Sprintf(`// %s
+package main
+
+import rosaline %q
+
+var _ = rosaline.Message
+
+%s`, generatedMarker, rosalineModule, methods.String())
+}
+
+func referencedHandlers(project *designProject) []string {
+	seen := make(map[string]bool)
+	var visit func(*designNode)
+	visit = func(node *designNode) {
+		if node == nil {
+			return
+		}
+		for _, handler := range node.Events {
+			if handler = strings.TrimSpace(handler); handler != "" {
+				seen[handler] = true
+			}
+		}
+		for _, child := range node.Children {
+			visit(child)
+		}
+	}
+	if project != nil {
+		visit(project.Root)
+	}
+	result := make([]string, 0, len(seen))
+	for name := range seen {
+		result = append(result, name)
+	}
+	sort.Strings(result)
+	return result
+}
+
+func indentBody(body, prefix string) string {
+	lines := strings.Split(body, "\n")
+	for index, line := range lines {
+		if strings.TrimSpace(line) != "" {
+			lines[index] = prefix + line
+		}
+	}
+	return strings.Join(lines, "\n")
+}
+
 func generatedMain() string {
 	return `package main
 
@@ -268,33 +352,19 @@ func main() {
 func generatedHandlers() string {
 	return `package main
 
-import (
-	"fmt"
-
-	rosaline "github.com/SeraphinaDX/Rosaline"
-)
-
 // Application contains your program's state and behavior. Rosaline Studio
 // never overwrites this file.
 type Application struct {
 	State UIState
 }
 
-// Action receives the action name assigned in Rosaline Studio. Add cases as
-// your application grows.
-func (app *Application) Action(name string) {
-	switch name {
-	case "continue":
-		rosaline.Message("Your application", "Continue action received.")
-	default:
-		fmt.Println("Rosaline action:", name)
-	}
-}
+// Add reusable application methods and non-visual logic below. Visual event
+// methods are edited in Studio and generated into events_generated.go.
 `
 }
 
 func generatedGoMod(project *designProject) string {
-	return fmt.Sprintf("module %s\n\ngo 1.25.0\n\nrequire %s v0.15.0\n", strings.TrimSpace(project.Module), rosalineModule)
+	return fmt.Sprintf("module %s\n\ngo 1.25.0\n\nrequire %s v0.16.0\n", strings.TrimSpace(project.Module), rosalineModule)
 }
 
 func generatedReadme(project *designProject) string {
@@ -308,8 +378,9 @@ Run it with:
 CGO_ENABLED=0 go run .
 ~~~
 
-Edit application behavior in handlers.go. Rosaline Studio may regenerate
-ui_generated.go and state_generated.go, so do not edit those two files.
+Edit visual event handlers in Rosaline Studio. Put reusable application logic
+in handlers.go. Studio regenerates ui_generated.go, state_generated.go, and
+events_generated.go, so do not edit those three files directly.
 `, project.Title)
 }
 
@@ -402,12 +473,25 @@ func generateNode(node *designNode, context *generationContext, depth int) strin
 		if node.Bold {
 			expression += ".Bold()"
 		}
-	case kindButton:
-		action := strings.TrimSpace(node.Action)
-		if action == "" {
-			action = node.ID
+	case kindImage:
+		picture := "nil"
+		if node.Asset != "" {
+			picture = fmt.Sprintf("generatedPicture(%q)", node.Asset)
 		}
-		expression = fmt.Sprintf("rosaline.Button(%q, func() { app.Action(%q) })", node.Text, action)
+		expression = fmt.Sprintf("rosaline.Image(%s).Placeholder(%q)", picture, defaultText(node.Text, "Choose an image"))
+		if node.Width > 0 && node.Height > 0 {
+			expression += fmt.Sprintf(".Fit(%d, %d)", node.Width, node.Height)
+		}
+		expression += generatedEventModifier(node, eventClick, "")
+		if node.Expand {
+			expression += ".Expand()"
+		}
+	case kindButton:
+		if handler := eventHandler(node, eventClick); handler != "" {
+			expression = fmt.Sprintf("rosaline.Button(%q, func() { app.%s() })", node.Text, handler)
+		} else {
+			expression = fmt.Sprintf("rosaline.Button(%q, nil)", node.Text)
+		}
 		if node.Primary {
 			expression += ".Primary()"
 		}
@@ -420,15 +504,19 @@ func generateNode(node *designNode, context *generationContext, depth int) strin
 		if node.Password {
 			expression += ".Password()"
 		}
+		expression += generatedEventModifier(node, eventChange, "string")
+		expression += generatedEventModifier(node, eventSubmit, "string")
 	case kindTextArea:
 		field := context.fieldsByID[node.ID]
 		expression = fmt.Sprintf("rosaline.TextArea(&app.State.%s)", field.Name)
 		if node.Expand {
 			expression += ".Expand()"
 		}
+		expression += generatedEventModifier(node, eventChange, "string")
 	case kindCheckBox:
 		field := context.fieldsByID[node.ID]
 		expression = fmt.Sprintf("rosaline.CheckBox(%q, &app.State.%s)", node.Text, field.Name)
+		expression += generatedEventModifier(node, eventChange, "bool")
 	case kindComboBox:
 		field := context.fieldsByID[node.ID]
 		options := make([]string, 0, len(node.Options))
@@ -440,6 +528,7 @@ func generateNode(node *designNode, context *generationContext, depth int) strin
 			expression += ", " + strings.Join(options, ", ")
 		}
 		expression += ")"
+		expression += generatedEventModifier(node, eventChange, "string")
 	case kindSlider:
 		field := context.fieldsByID[node.ID]
 		minimum, maximum := node.Minimum, node.Maximum
@@ -453,6 +542,7 @@ func generateNode(node *designNode, context *generationContext, depth int) strin
 		if node.Vertical {
 			expression += ".Vertical()"
 		}
+		expression += generatedEventModifier(node, eventChange, "float64")
 	case kindProgressBar:
 		field := context.fieldsByID[node.ID]
 		expression = fmt.Sprintf("rosaline.ProgressBar(&app.State.%s)", field.Name)
@@ -468,10 +558,22 @@ func generateNode(node *designNode, context *generationContext, depth int) strin
 		expression = "rosaline.Label(\"Unknown widget\")"
 	}
 
-	if node.Kind != kindScroll && node.Kind != kindSpacer && node.Width > 0 && node.Height > 0 {
+	if node.Kind != kindScroll && node.Kind != kindSpacer && node.Kind != kindImage && node.Width > 0 && node.Height > 0 {
 		expression = fmt.Sprintf("rosaline.Size(%s, %d, %d)", expression, node.Width, node.Height)
 	}
 	return expression
+}
+
+func generatedEventModifier(node *designNode, event, valueType string) string {
+	handler := eventHandler(node, event)
+	if handler == "" {
+		return ""
+	}
+	parameter := ""
+	if valueType != "" {
+		parameter = valueType
+	}
+	return fmt.Sprintf(".%s(func(%s) { app.%s() })", event, parameter, handler)
 }
 
 func layoutModifiers(node *designNode) string {
