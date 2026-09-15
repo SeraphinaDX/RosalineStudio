@@ -1,11 +1,14 @@
 {
-  "version": 1,
+  "version": 2,
   "module": "example.com/welcome",
   "title": "Welcome",
   "width": 760,
   "height": 540,
   "padding": 16,
   "theme": "Lavender",
+  "handlers": {
+    "ContinueClick": "rosaline.Message(\"Welcome\", \"Your Rosaline event handler is working.\")"
+  },
   "root": {
     "id": "root",
     "kind": "Column",
@@ -51,7 +54,9 @@
                 "id": "node-8",
                 "kind": "Button",
                 "text": "Continue",
-                "action": "continue",
+                "events": {
+                  "OnClick": "ContinueClick"
+                },
                 "primary": true
               }
             ],
@@ -74,4 +79,3 @@
     "expand": true
   }
 }
-

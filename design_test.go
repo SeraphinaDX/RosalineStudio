@@ -3,8 +3,10 @@
 package main
 
 import (
+	"os"
 	"path/filepath"
 	"reflect"
+	"strings"
 	"testing"
 )
 
@@ -101,5 +103,29 @@ func TestNewNestedLayoutsUseNaturalSize(t *testing.T) {
 		if node := defaultNode(kind, "test"); node.Expand {
 			t.Fatalf("new %s unexpectedly expands by default", kind)
 		}
+	}
+}
+
+func TestVersionOneDesignsAreRejectedClearly(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "old.rosaline")
+	data := []byte(`{"version":1,"module":"example.com/old","title":"Old","width":720,"height":520,"padding":16,"theme":"Rosaline","root":{"id":"root","kind":"Column"}}`)
+	if err := os.WriteFile(path, data, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := loadDesign(path); err == nil || !strings.Contains(err.Error(), "unsupported design version 1") {
+		t.Fatalf("want an unsupported-version error, got %v", err)
+	}
+}
+
+func TestEventValidation(t *testing.T) {
+	project := newProject()
+	project.Root.Children[2].Events[eventClick] = "not-valid!"
+	if err := project.validate(); err == nil {
+		t.Fatal("invalid handler name was accepted")
+	}
+	project = newProject()
+	project.Handlers["ContinueClick"] = "if {"
+	if err := project.validate(); err == nil {
+		t.Fatal("invalid event code was accepted")
 	}
 }

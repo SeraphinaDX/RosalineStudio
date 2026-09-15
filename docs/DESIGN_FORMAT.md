@@ -1,13 +1,13 @@
 # Rosaline design format
 
 Rosaline Studio stores visual projects as UTF-8 JSON files ending in
-`.rosaline`. The current schema version is `1`.
+`.rosaline`. The current schema version is `2`.
 
 ## Project fields
 
 | Field | Type | Meaning |
 |---|---|---|
-| `version` | integer | Design schema version; currently `1` |
+| `version` | integer | Design schema version; currently `2` |
 | `module` | string | Generated Go module path |
 | `title` | string | Application window title |
 | `width` | integer | Initial window width in pixels |
@@ -15,6 +15,7 @@ Rosaline Studio stores visual projects as UTF-8 JSON files ending in
 | `padding` | integer | Window content padding |
 | `theme` | string | `Rosaline`, `Lavender`, or `Midnight` |
 | `root` | widget | Root layout widget |
+| `handlers` | object | Go event bodies keyed by handler method name |
 
 ## Widget fields
 
@@ -25,7 +26,8 @@ widget are omitted when empty.
 |---|---|---|
 | `text` | labels, buttons, inputs, checks | Visible text or placeholder |
 | `name` | stateful controls | Preferred generated Go state-field name |
-| `action` | buttons | String passed to `Application.Action` |
+| `asset` | images | Safe filename in the design's `.assets` folder |
+| `events` | interactive controls | Event names mapped to Go handler methods |
 | `options` | combo boxes | Available choices |
 | `children` | layouts | Nested widgets in display order |
 | `gap`, `padding` | layouts | Spacing in pixels |
@@ -46,13 +48,16 @@ numeric suffix. For example, `display name` and `display-name` become
 
 ```json
 {
-  "version": 1,
+  "version": 2,
   "module": "example.com/greeting",
   "title": "Greeting",
   "width": 720,
   "height": 520,
   "padding": 16,
   "theme": "Lavender",
+  "handlers": {
+    "GreetClick": "rosaline.Message(\"Hello\", \"Welcome, \"+app.State.Name+\"!\")"
+  },
   "root": {
     "id": "root",
     "kind": "Column",
@@ -73,7 +78,9 @@ numeric suffix. For example, `display name` and `display-name` become
         "id": "node-3",
         "kind": "Button",
         "text": "Say hello",
-        "action": "greet",
+        "events": {
+          "OnClick": "GreetClick"
+        },
         "primary": true
       }
     ],
@@ -88,9 +95,10 @@ numeric suffix. For example, `display name` and `display-name` become
 
 Studio rejects unknown JSON fields, unknown widget kinds, repeated IDs,
 children inside non-container controls, and more than one child in a `Card` or
-`Scroll`. Strict loading catches typing mistakes rather than silently losing
-design data.
+`Scroll`. It also validates event names, handler identifiers, and Go syntax.
+Strict loading catches typing mistakes rather than silently losing design data.
 
-Future schema changes will use the top-level version number. Commit design
-files to Git before opening important work in a newer Studio version.
-
+Version-1 designs used a generic string action dispatcher and are intentionally
+not compatible with version 2. Future schema changes will continue to use the
+top-level version number. Commit design files to Git before opening important
+work in a newer Studio version.

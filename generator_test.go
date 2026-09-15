@@ -5,6 +5,9 @@ package main
 import (
 	"go/parser"
 	"go/token"
+	"image"
+	"image/color"
+	"image/png"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -20,7 +23,7 @@ func TestGenerateProjectCreatesParseableGoAndPreservesDeveloperFiles(t *testing.
 	if err != nil {
 		t.Fatalf("first generation: %v", err)
 	}
-	if len(report.Created) != 6 || len(report.Updated) != 0 {
+	if len(report.Created) != 7 || len(report.Updated) != 0 {
 		t.Fatalf("unexpected first report: %#v", report)
 	}
 	parseGeneratedGo(t, directory)
@@ -52,6 +55,85 @@ func TestGenerateProjectCreatesParseableGoAndPreservesDeveloperFiles(t *testing.
 	}
 	if !strings.Contains(string(ui), `Title:   "A Changed Title"`) || !strings.Contains(string(ui), "Width:   901") {
 		t.Fatal("regenerated application settings were not written to ui_generated.go")
+	}
+}
+
+func TestGeneratorCreatesEventMethods(t *testing.T) {
+	project := newProject()
+	project.Root.Children = []*designNode{
+		{ID: "name", Kind: kindTextBox, Name: "Name", Events: map[string]string{eventSubmit: "SubmitName"}},
+	}
+	project.Handlers = map[string]string{
+		"SubmitName": `rosaline.Message("Hello", app.State.Name)`,
+	}
+	directory := t.TempDir()
+	if _, err := generateProject(project, directory); err != nil {
+		t.Fatal(err)
+	}
+	ui, err := os.ReadFile(filepath.Join(directory, "ui_generated.go"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	events, err := os.ReadFile(filepath.Join(directory, "events_generated.go"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(ui), ".OnSubmit(func(string) { app.SubmitName() })") {
+		t.Fatalf("generated UI did not bind OnSubmit:\n%s", ui)
+	}
+	if !strings.Contains(string(events), "func (app *Application) SubmitName()") || !strings.Contains(string(events), "app.State.Name") {
+		t.Fatalf("generated event method is incomplete:\n%s", events)
+	}
+}
+
+func TestGeneratorCopiesAndEmbedsImageAssets(t *testing.T) {
+	parent := t.TempDir()
+	directory := filepath.Join(parent, "gallery")
+	assetDirectory := directory + ".assets"
+	if err := os.MkdirAll(assetDirectory, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	assetName := "rose.png"
+	file, err := os.Create(filepath.Join(assetDirectory, assetName))
+	if err != nil {
+		t.Fatal(err)
+	}
+	pixels := image.NewRGBA(image.Rect(0, 0, 8, 5))
+	pixels.Set(3, 2, color.RGBA{R: 196, G: 63, B: 122, A: 255})
+	if err := png.Encode(file, pixels); err != nil {
+		file.Close()
+		t.Fatal(err)
+	}
+	if err := file.Close(); err != nil {
+		t.Fatal(err)
+	}
+	project := newProject()
+	project.Root.Children = []*designNode{{
+		ID: "picture", Kind: kindImage, Text: "A rose", Asset: assetName,
+		Width: 320, Height: 180, Events: map[string]string{eventClick: "PictureClick"},
+	}}
+	project.Handlers = map[string]string{"PictureClick": "// Picture clicked."}
+	report, err := generateProject(project, directory)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(filepath.Join(directory, "assets", assetName)); err != nil {
+		t.Fatalf("generated asset is missing: %v", err)
+	}
+	ui, err := os.ReadFile(filepath.Join(directory, "ui_generated.go"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	text := string(ui)
+	if !strings.Contains(text, "//go:embed assets/*") || !strings.Contains(text, `generatedPicture("rose.png")`) || !strings.Contains(text, ".Fit(320, 180)") {
+		t.Fatalf("generated image support is incomplete:\n%s", text)
+	}
+	found := false
+	for _, name := range report.Created {
+		found = found || name == "assets/rose.png"
+	}
+	if !found {
+		t.Fatalf("asset was not reported: %#v", report)
 	}
 }
 

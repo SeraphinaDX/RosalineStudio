@@ -17,8 +17,8 @@ Continue button.
 ## 2. Understand the three panels
 
 - The left panel contains the widget palette and application hierarchy.
-- The center is a visual structural preview. Click a widget to select it.
-- The right panel edits the selected widget or the whole application.
+- The center switches between the visual Form and integrated Go Code views.
+- The right inspector has Properties, Events, and Application tabs.
 
 Double-clicking a palette item adds it to the selected container. If a control
 is selected, Studio adds the new widget to that control's parent container.
@@ -32,7 +32,8 @@ when you need several controls in one of them.
 2. Change **Text or placeholder** to `Welcome to my first app`.
 3. Choose **Apply Widget Properties**.
 4. Select the text box and keep its state field name as `Name`.
-5. Select the button, change its action to `greet`, and apply.
+5. Select the button and open the right inspector's **Events** tab.
+6. Select `OnClick`, enter `GreetClick`, and choose **Assign and Edit**.
 
 Property edits take effect when you press their Apply button. This makes it
 easy to change several related values as one undoable operation.
@@ -66,7 +67,8 @@ Nothing is downloaded until you choose Yes.
 
 1. Save the design.
 2. Create or update the application subfolder.
-3. Regenerate `ui_generated.go` and `state_generated.go`.
+3. Regenerate `ui_generated.go`, `state_generated.go`, and
+   `events_generated.go`.
 4. Create the developer files that do not exist yet.
 5. Download Rosaline and its dependencies when needed.
 6. Run that application subfolder with `CGO_ENABLED=0`.
@@ -75,31 +77,37 @@ Close the generated application window to return to editing.
 
 ## 7. Add real behavior
 
-Open `handlers.go` in the generated application folder. Replace its action
-switch with:
+Studio opens the Code view for `GreetClick`. Replace the starter body with:
 
 ```go
-func (app *Application) Action(name string) {
-	switch name {
-	case "greet":
-		person := app.State.Name
-		if person == "" {
-			person = "friend"
-		}
-		rosaline.Message("Hello", "Welcome, "+person+"!")
-	default:
-		fmt.Println("Rosaline action:", name)
-	}
+person := app.State.Name
+if person == "" {
+	person = "friend"
 }
+rosaline.Message("Hello", "Welcome, "+person+"!")
 ```
+
+Choose **Save Event Code**, then return to the Form view. Studio checks the Go
+syntax before saving the handler.
 
 `app.State.Name` is a normal Go string. The generated text box receives its
 address and updates it when the user types.
 
-Run again from Studio. Your handler stays in place because Studio never
-overwrites `handlers.go`.
+Run again from Studio. The generated button calls `app.GreetClick()` directly.
 
-## 8. Keep designing safely
+## 8. Add a picture
+
+1. Select a container and add **Image** from the palette.
+2. Select the new Image control and choose **Choose Image...** in Properties.
+3. Pick a PNG, JPEG, GIF, BMP, TIFF, WebP, or AVIF file.
+4. Adjust Width and Height in Layout if desired.
+5. To make it interactive, assign its `OnClick` event just like the button.
+
+Studio copies the picture into `greeting.assets/`. During generation it copies
+and embeds the asset in the Go application, so the compiled program can find
+the picture regardless of its working directory.
+
+## 9. Keep designing safely
 
 You can now add widgets, rename state fields, switch themes, or completely
 rearrange the layout. On every generation:
@@ -107,9 +115,9 @@ rearrange the layout. On every generation:
 - Studio-owned files are refreshed.
 - Developer-owned files are preserved byte for byte.
 
-Do not hand-edit files ending in `_generated.go`; make visual changes in Studio
-instead. Put business logic, files, networking, and custom behavior in
-`handlers.go` or additional `.go` files you create.
+Do not hand-edit files ending in `_generated.go`; make visual and event changes
+in Studio instead. Put reusable logic, additional imports, files, networking,
+and custom behavior in `handlers.go` or additional `.go` files you create.
 
 ## Keyboard shortcuts
 

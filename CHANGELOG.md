@@ -2,6 +2,27 @@
 
 All notable Rosaline Studio changes are documented here.
 
+## v0.2.0 - 2026-09-15
+
+- Reshape Studio around a Lazarus-style Form and Code workflow.
+- Add an Events inspector with `OnClick`, `OnChange`, and `OnSubmit` events
+  appropriate to each supported control.
+- Open the default event by double-clicking a control in the form preview.
+- Add an integrated Go event-body editor with syntax validation, saved-state
+  prompts, and generated `events_generated.go` methods.
+- Replace the generic string-based `Application.Action` dispatcher with named
+  Go handler methods.
+- Add Image to the component palette with a file chooser, real preview,
+  aspect-preserving dimensions, click events, and AVIF support.
+- Copy imported pictures into a design-owned asset folder and embed them in
+  generated applications so deployed programs do not depend on a working
+  directory.
+- Copy design assets during Save As and preserve developer-owned Go files.
+- Advance the strict design schema to version 2. Version-1 designs are not
+  compatible with this release.
+- Require Rosaline v0.16.0 for embedded images, fitted image controls, canvas
+  image previews, double-click events, and mounted editor focus.
+
 ## v0.1.5 - 2026-09-07
 
 - Added a first-run project setup prompt before Studio creates generated files

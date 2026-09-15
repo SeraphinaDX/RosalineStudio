@@ -241,6 +241,8 @@ func previewNaturalSize(node *designNode, horizontal bool) float64 {
 		return 38
 	case kindTextArea:
 		return 110
+	case kindImage:
+		return 160
 	case kindScroll:
 		return 180
 	case kindColumn, kindRow, kindGrid, kindStack, kindCard:
@@ -345,7 +347,7 @@ func paletteFor(theme string) previewPalette {
 	}
 }
 
-func drawPreview(canvas *rosaline.DrawingCanvas, project *designProject, boxes []previewBox, selectedID string) {
+func drawPreview(canvas *rosaline.DrawingCanvas, project *designProject, boxes []previewBox, selectedID string, resolvers ...func(string) *rosaline.Picture) {
 	outer := rosaline.Hex("#ead7e3")
 	canvas.Clear(outer)
 	if project == nil {
@@ -363,13 +365,17 @@ func drawPreview(canvas *rosaline.DrawingCanvas, project *designProject, boxes [
 	content := previewContentBounds(project)
 	canvas.FillRect(content.X, content.Y, content.Width, content.Height, colors.background)
 
-	for _, box := range boxes {
-		drawPreviewNode(canvas, box, colors, box.Node.ID == selectedID)
+	var resolve func(string) *rosaline.Picture
+	if len(resolvers) != 0 {
+		resolve = resolvers[0]
 	}
-	canvas.Text("Click to select - drag onto another widget to move", 18, previewHeight-16, rosaline.TextStyle{Color: rosaline.Hex("#74586a"), Size: 10})
+	for _, box := range boxes {
+		drawPreviewNode(canvas, box, colors, box.Node.ID == selectedID, resolve)
+	}
+	canvas.Text("Click to select - double-click to edit an event - drag to move", 18, previewHeight-16, rosaline.TextStyle{Color: rosaline.Hex("#74586a"), Size: 10})
 }
 
-func drawPreviewNode(canvas *rosaline.DrawingCanvas, box previewBox, colors previewPalette, selected bool) {
+func drawPreviewNode(canvas *rosaline.DrawingCanvas, box previewBox, colors previewPalette, selected bool, resolve func(string) *rosaline.Picture) {
 	node := box.Node
 	rectangle := box.Rect
 	if node == nil {
@@ -397,6 +403,18 @@ func drawPreviewNode(canvas *rosaline.DrawingCanvas, box previewBox, colors prev
 		if selected {
 			canvas.Rect(rectangle.X, rectangle.Y, rectangle.Width, rectangle.Height, 2, selection)
 		}
+	case kindImage:
+		canvas.FillRect(rectangle.X, rectangle.Y, rectangle.Width, rectangle.Height, colors.surface)
+		if resolve != nil && node.Asset != "" {
+			if picture := resolve(node.Asset); picture != nil {
+				canvas.ImageFit(picture, rosaline.Rect{X: rectangle.X + 3, Y: rectangle.Y + 3, Width: rectangle.Width - 6, Height: rectangle.Height - 6})
+			} else {
+				canvas.Text("Missing image: "+node.Asset, rectangle.X+8, rectangle.Y+8, rosaline.TextStyle{Color: colors.muted, Size: 10})
+			}
+		} else {
+			canvas.Text(defaultText(node.Text, "Choose an image"), rectangle.X+8, rectangle.Y+8, rosaline.TextStyle{Color: colors.muted, Size: 11})
+		}
+		canvas.Rect(rectangle.X, rectangle.Y, rectangle.Width, rectangle.Height, strokeFor(selected), outline)
 	case kindButton:
 		fill := colors.surface
 		text := colors.text

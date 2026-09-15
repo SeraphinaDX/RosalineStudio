@@ -12,7 +12,7 @@ import (
 	"strings"
 )
 
-const designVersion = 1
+const designVersion = 2
 
 type widgetKind string
 
@@ -24,6 +24,7 @@ const (
 	kindCard        widgetKind = "Card"
 	kindScroll      widgetKind = "Scroll"
 	kindLabel       widgetKind = "Label"
+	kindImage       widgetKind = "Image"
 	kindButton      widgetKind = "Button"
 	kindTextBox     widgetKind = "TextBox"
 	kindTextArea    widgetKind = "TextArea"
@@ -36,6 +37,7 @@ const (
 
 var paletteKinds = []widgetKind{
 	kindLabel,
+	kindImage,
 	kindButton,
 	kindTextBox,
 	kindTextArea,
@@ -53,37 +55,39 @@ var paletteKinds = []widgetKind{
 }
 
 type designNode struct {
-	ID       string        `json:"id"`
-	Kind     widgetKind    `json:"kind"`
-	Text     string        `json:"text,omitempty"`
-	Name     string        `json:"name,omitempty"`
-	Action   string        `json:"action,omitempty"`
-	Options  []string      `json:"options,omitempty"`
-	Children []*designNode `json:"children,omitempty"`
-	Gap      int           `json:"gap,omitempty"`
-	Padding  int           `json:"padding,omitempty"`
-	Columns  int           `json:"columns,omitempty"`
-	Width    int           `json:"width,omitempty"`
-	Height   int           `json:"height,omitempty"`
-	Minimum  float64       `json:"minimum,omitempty"`
-	Maximum  float64       `json:"maximum,omitempty"`
-	Step     float64       `json:"step,omitempty"`
-	Expand   bool          `json:"expand,omitempty"`
-	Primary  bool          `json:"primary,omitempty"`
-	Bold     bool          `json:"bold,omitempty"`
-	Password bool          `json:"password,omitempty"`
-	Vertical bool          `json:"vertical,omitempty"`
+	ID       string            `json:"id"`
+	Kind     widgetKind        `json:"kind"`
+	Text     string            `json:"text,omitempty"`
+	Name     string            `json:"name,omitempty"`
+	Asset    string            `json:"asset,omitempty"`
+	Events   map[string]string `json:"events,omitempty"`
+	Options  []string          `json:"options,omitempty"`
+	Children []*designNode     `json:"children,omitempty"`
+	Gap      int               `json:"gap,omitempty"`
+	Padding  int               `json:"padding,omitempty"`
+	Columns  int               `json:"columns,omitempty"`
+	Width    int               `json:"width,omitempty"`
+	Height   int               `json:"height,omitempty"`
+	Minimum  float64           `json:"minimum,omitempty"`
+	Maximum  float64           `json:"maximum,omitempty"`
+	Step     float64           `json:"step,omitempty"`
+	Expand   bool              `json:"expand,omitempty"`
+	Primary  bool              `json:"primary,omitempty"`
+	Bold     bool              `json:"bold,omitempty"`
+	Password bool              `json:"password,omitempty"`
+	Vertical bool              `json:"vertical,omitempty"`
 }
 
 type designProject struct {
-	Version int         `json:"version"`
-	Module  string      `json:"module"`
-	Title   string      `json:"title"`
-	Width   int         `json:"width"`
-	Height  int         `json:"height"`
-	Padding int         `json:"padding"`
-	Theme   string      `json:"theme"`
-	Root    *designNode `json:"root"`
+	Version  int               `json:"version"`
+	Module   string            `json:"module"`
+	Title    string            `json:"title"`
+	Width    int               `json:"width"`
+	Height   int               `json:"height"`
+	Padding  int               `json:"padding"`
+	Theme    string            `json:"theme"`
+	Root     *designNode       `json:"root"`
+	Handlers map[string]string `json:"handlers,omitempty"`
 }
 
 func newProject() *designProject {
@@ -95,6 +99,9 @@ func newProject() *designProject {
 		Height:  520,
 		Padding: 16,
 		Theme:   "Rosaline",
+		Handlers: map[string]string{
+			"ContinueClick": `rosaline.Message("Your application", "Continue clicked.")`,
+		},
 		Root: &designNode{
 			ID:      "root",
 			Kind:    kindColumn,
@@ -104,7 +111,7 @@ func newProject() *designProject {
 			Children: []*designNode{
 				{ID: "node-1", Kind: kindLabel, Text: "Welcome to Rosaline", Bold: true},
 				{ID: "node-2", Kind: kindTextBox, Text: "Your name", Name: "Name"},
-				{ID: "node-3", Kind: kindButton, Text: "Continue", Action: "continue", Primary: true},
+				{ID: "node-3", Kind: kindButton, Text: "Continue", Events: map[string]string{"OnClick": "ContinueClick"}, Primary: true},
 			},
 		},
 	}
@@ -126,9 +133,11 @@ func defaultNode(kind widgetKind, id string) *designNode {
 		node.Expand = true
 	case kindLabel:
 		node.Text = "Label"
+	case kindImage:
+		node.Text = "Choose an image"
+		node.Width, node.Height = 320, 200
 	case kindButton:
 		node.Text = "Button"
-		node.Action = "buttonClicked"
 	case kindTextBox:
 		node.Text = "Enter text"
 		node.Name = "Text"
@@ -348,6 +357,11 @@ func (project *designProject) validate() error {
 		return errors.New("the Go module path cannot be empty")
 	}
 	seen := make(map[string]bool)
+	for name, body := range project.Handlers {
+		if err := validateHandler(name, body); err != nil {
+			return err
+		}
+	}
 	var visit func(*designNode) error
 	visit = func(node *designNode) error {
 		if node == nil {
@@ -365,6 +379,17 @@ func (project *designProject) validate() error {
 		}
 		if (node.Kind == kindCard || node.Kind == kindScroll) && len(node.Children) > 1 {
 			return fmt.Errorf("%s can contain only one widget", node.Kind)
+		}
+		for event, handler := range node.Events {
+			if !supportsEvent(node.Kind, event) {
+				return fmt.Errorf("%s does not support event %q", node.Kind, event)
+			}
+			if !validHandlerName(handler) {
+				return fmt.Errorf("widget %s has invalid handler name %q", node.ID, handler)
+			}
+		}
+		if node.Asset != "" && filepath.Base(node.Asset) != node.Asset {
+			return fmt.Errorf("widget %s has invalid asset name %q", node.ID, node.Asset)
 		}
 		for _, child := range node.Children {
 			if err := visit(child); err != nil {
@@ -413,6 +438,9 @@ func loadDesign(path string) (*designProject, error) {
 	decoder.DisallowUnknownFields()
 	if err := decoder.Decode(&project); err != nil {
 		return nil, fmt.Errorf("decode design: %w", err)
+	}
+	if project.Handlers == nil {
+		project.Handlers = make(map[string]string)
 	}
 	if err := project.validate(); err != nil {
 		return nil, err
