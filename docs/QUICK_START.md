@@ -23,6 +23,12 @@ Continue button.
 Double-clicking a palette item adds it to the selected container. If a control
 is selected, Studio adds the new widget to that control's parent container.
 
+Select an unwanted widget and use **Delete Selected** above the form, the
+hierarchy's **Delete** button, **Edit > Delete Selected Widget**, or a
+right-click menu. Delete also works while the form or hierarchy has keyboard
+focus. Populated layouts ask for confirmation, and Primary+Z restores the whole
+subtree. The root layout cannot be deleted.
+
 `Card` and `Scroll` accept one child. Put a `Column`, `Row`, or `Grid` inside
 when you need several controls in one of them.
 
@@ -132,7 +138,7 @@ and custom behavior in `handlers.go` or additional `.go` files you create.
 | Primary+Z | Undo |
 | Primary+Shift+Z | Redo |
 | Alt+Up / Alt+Down | Reorder selected widget |
-| Delete | Delete selected widget |
+| Delete | Delete selected widget while the Form or Hierarchy has focus |
 | F1 | Quick help |
 
 On Linux and Windows, Primary is Control. On macOS, it is Command.

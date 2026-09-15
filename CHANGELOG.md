@@ -2,6 +2,21 @@
 
 All notable Rosaline Studio changes are documented here.
 
+## v0.2.1 - 2026-09-15
+
+- Put a prominent **Delete Selected** command directly above the form preview
+  while retaining the hierarchy button and Edit-menu command.
+- Add right-click menus to both the form and hierarchy with edit, reorder, and
+  delete commands.
+- Make the Delete key operate only while the form or hierarchy has focus, so it
+  cannot remove a widget while editing text or Go code.
+- Select the nearest remaining sibling after deletion instead of unexpectedly
+  jumping back to the containing layout.
+- Confirm removal of populated layouts, protect the root layout, retain event
+  methods and imported assets, and make the entire subtree undoable.
+- Require Rosaline v0.16.1 for canvas and tree context menus and focus-safe tree
+  key events.
+
 ## v0.2.0 - 2026-09-15
 
 - Reshape Studio around a Lazarus-style Form and Code workflow.
