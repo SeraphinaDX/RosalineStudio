@@ -27,6 +27,13 @@ func TestGenerateProjectCreatesParseableGoAndPreservesDeveloperFiles(t *testing.
 		t.Fatalf("unexpected first report: %#v", report)
 	}
 	parseGeneratedGo(t, directory)
+	goMod, err := os.ReadFile(filepath.Join(directory, "go.mod"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(goMod), "require "+rosalineModule+" "+rosalineVersion) {
+		t.Fatalf("generated go.mod does not require %s: %s", rosalineVersion, goMod)
+	}
 
 	handwritten := []byte("package main\n\n// Mine stays mine.\n")
 	handlers := filepath.Join(directory, "handlers.go")

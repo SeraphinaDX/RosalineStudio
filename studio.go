@@ -115,16 +115,20 @@ func (studio *studio) run() {
 		}
 		studio.selectNode(node.Value())
 	})
+	studio.tree.OnKeyDown(studio.handleDesignerKey)
+	studio.tree.ContextMenu(studio.widgetContextEntries()...)
 
 	studio.canvas = rosaline.Canvas(func(canvas *rosaline.DrawingCanvas) {
 		drawPreview(canvas, studio.project, layoutPreview(studio.project), studio.selectedID, studio.previewPicture)
 	}).Size(previewWidth, previewHeight).Focus()
 	studio.canvas.OnMouseDown(func(event rosaline.MouseEvent) {
-		if event.Button != rosaline.MouseLeft {
+		if event.Button != rosaline.MouseLeft && event.Button != rosaline.MouseRight {
 			return
 		}
 		if node := previewBoxAt(layoutPreview(studio.project), event.X, event.Y); node != nil {
-			studio.dragID = node.ID
+			if event.Button == rosaline.MouseLeft {
+				studio.dragID = node.ID
+			}
 			studio.selectNode(node.ID)
 		}
 	})
@@ -154,6 +158,8 @@ func (studio *studio) run() {
 		studio.selectNode(node.ID)
 		studio.editDefaultEvent()
 	})
+	studio.canvas.OnKeyDown(studio.handleDesignerKey)
+	studio.canvas.ContextMenu(studio.widgetContextEntries()...)
 
 	studio.eventList = rosaline.List().Size(28, 6)
 	studio.eventList.OnSelect(func(index int, _ string) {
@@ -249,7 +255,7 @@ func (studio *studio) run() {
 			rosaline.MenuSeparator(),
 			rosaline.MenuItem("Move Up", func() { studio.moveSelected(-1) }).Shortcut("Alt+Up"),
 			rosaline.MenuItem("Move Down", func() { studio.moveSelected(1) }).Shortcut("Alt+Down"),
-			rosaline.MenuItem("Delete Widget", studio.deleteSelected).Shortcut("Delete"),
+			rosaline.MenuItem("Delete Selected Widget", studio.deleteSelected),
 		),
 		rosaline.Menu("Help",
 			rosaline.MenuItem("Quick Help", studio.showHelp).Shortcut("F1"),
@@ -333,7 +339,16 @@ func (studio *studio) buildPalettePanel() rosaline.Widget {
 }
 
 func (studio *studio) buildWorkspace() rosaline.Widget {
-	form := rosaline.Center(rosaline.Card(studio.canvas).Padding(5))
+	form := rosaline.Column(
+		rosaline.Row(
+			rosaline.LabelFunc(studio.selectedWidgetLabel).Bold(),
+			rosaline.Spring(),
+			rosaline.Button("Move Up", func() { studio.moveSelected(-1) }),
+			rosaline.Button("Move Down", func() { studio.moveSelected(1) }),
+			rosaline.Button("Delete Selected", studio.deleteSelected),
+		).Gap(6),
+		rosaline.Center(rosaline.Card(studio.canvas).Padding(5)),
+	).Gap(7).Expand()
 	code := rosaline.Column(
 		rosaline.LabelFunc(studio.codeHeader).Bold().Color(rosaline.Rose),
 		rosaline.Label("Write the body of this Go event method. The app and rosaline names are ready to use.").Color(rosaline.DefaultTheme.Muted),
@@ -717,17 +732,72 @@ func (studio *studio) addWidget(kind widgetKind) {
 }
 
 func (studio *studio) deleteSelected() {
+	studio.deleteSelectedWithConfirm(rosaline.Confirm)
+}
+
+func (studio *studio) deleteSelectedWithConfirm(confirm func(title, text string) bool) {
+	node := studio.project.find(studio.selectedID)
+	if node == nil {
+		studio.status = "Select a widget before deleting"
+		return
+	}
+	if node == studio.project.Root {
+		studio.status = "The root layout cannot be deleted; select one of its children"
+		return
+	}
+	contained := containedWidgetCount(node)
+	if contained > 0 {
+		message := fmt.Sprintf("Delete this %s and its %d contained widget", node.Kind, contained)
+		if contained != 1 {
+			message += "s"
+		}
+		message += "? You can undo this change."
+		if confirm == nil || !confirm("Delete layout?", message) {
+			studio.status = "Deletion cancelled"
+			return
+		}
+	}
 	before := designSnapshot(studio.project)
-	parent := studio.project.parentOf(studio.selectedID)
+	nextSelection := studio.project.selectionAfterRemoval(studio.selectedID)
+	deleted := string(node.Kind)
 	if err := studio.project.remove(studio.selectedID); err != nil {
 		studio.status = "Could not delete widget: " + err.Error()
 		return
 	}
-	studio.selectedID = studio.project.Root.ID
-	if parent != nil {
-		studio.selectedID = parent.ID
+	studio.selectedID = nextSelection
+	studio.commitChange(before, "Deleted "+deleted+" - use Primary+Z to undo")
+}
+
+func (studio *studio) handleDesignerKey(event rosaline.KeyEvent) {
+	if event.Is(rosaline.KeyDelete) && !event.Control && !event.Alt && !event.Primary {
+		studio.deleteSelected()
 	}
-	studio.commitChange(before, "Deleted widget")
+}
+
+func (studio *studio) widgetContextEntries() []rosaline.MenuEntry {
+	return []rosaline.MenuEntry{
+		rosaline.MenuItem("Edit Default Event", studio.editDefaultEvent),
+		rosaline.MenuSeparator(),
+		rosaline.MenuItem("Move Up", func() { studio.moveSelected(-1) }),
+		rosaline.MenuItem("Move Down", func() { studio.moveSelected(1) }),
+		rosaline.MenuSeparator(),
+		rosaline.MenuItem("Delete Selected Widget", studio.deleteSelected),
+	}
+}
+
+func (studio *studio) selectedWidgetLabel() string {
+	node := studio.project.find(studio.selectedID)
+	if node == nil {
+		return "No widget selected"
+	}
+	if node == studio.project.Root {
+		return string(node.Kind) + " (root layout)"
+	}
+	label := string(node.Kind)
+	if text := strings.TrimSpace(defaultText(node.Text, node.Name)); text != "" {
+		label += " - " + text
+	}
+	return label
 }
 
 func (studio *studio) moveSelected(difference int) {
@@ -1097,7 +1167,7 @@ func (studio *studio) documentName() string {
 func (studio *studio) showHelp() {
 	rosaline.Message(
 		"Rosaline Studio Quick Help",
-		"1. Select a container in the hierarchy.\n2. Double-click a palette item to add it.\n3. Select controls in the Form or hierarchy.\n4. Edit values in Properties and choose Apply.\n5. Use Events to assign a handler, or double-click a form control.\n6. Write the handler body in Code and save it.\n7. Add Image controls and choose picture files in Properties.\n8. Press F5 to generate and run.\n\nStudio never overwrites handlers.go, main.go, go.mod, or README.md.",
+		"1. Select a container in the hierarchy.\n2. Double-click a palette item to add it.\n3. Select controls in the Form or hierarchy.\n4. Right-click or use Delete Selected to remove mistakes; Primary+Z restores them.\n5. Edit values in Properties and choose Apply.\n6. Use Events to assign a handler, or double-click a form control.\n7. Write the handler body in Code and save it.\n8. Add Image controls and choose picture files in Properties.\n9. Press F5 to generate and run.\n\nStudio never overwrites handlers.go, main.go, go.mod, or README.md.",
 	)
 	studio.canvas.Focus()
 }

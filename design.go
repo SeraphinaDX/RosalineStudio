@@ -274,6 +274,46 @@ func (project *designProject) remove(id string) error {
 	return errors.New("widget was not found")
 }
 
+// selectionAfterRemoval returns the most natural remaining selection for a
+// visual editor: the next sibling, the previous sibling, or finally the
+// parent when the removed node was its only child.
+func (project *designProject) selectionAfterRemoval(id string) string {
+	if project == nil || project.Root == nil {
+		return ""
+	}
+	parent := project.parentOf(id)
+	if parent == nil {
+		return project.Root.ID
+	}
+	for index, child := range parent.Children {
+		if child == nil || child.ID != id {
+			continue
+		}
+		if index+1 < len(parent.Children) {
+			return parent.Children[index+1].ID
+		}
+		if index > 0 {
+			return parent.Children[index-1].ID
+		}
+		return parent.ID
+	}
+	return parent.ID
+}
+
+func containedWidgetCount(node *designNode) int {
+	if node == nil {
+		return 0
+	}
+	count := 0
+	for _, child := range node.Children {
+		if child == nil {
+			continue
+		}
+		count += 1 + containedWidgetCount(child)
+	}
+	return count
+}
+
 func (project *designProject) moveBy(id string, difference int) error {
 	parent := project.parentOf(id)
 	if parent == nil {

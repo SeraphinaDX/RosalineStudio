@@ -10,11 +10,13 @@ Rosaline Studio is itself a pure-Go Rosaline application. It builds with
 
 ![Screenshot](rosaline-studio.avif)
 
-## What v0.2 can do
+## What v0.2.1 can do
 
 - Add controls and layouts from a compact widget palette
 - Select widgets from the hierarchy or the visual preview
 - Drag widgets onto a container or sibling to rearrange the design
+- Delete widgets from the form toolbar, hierarchy, Edit menu, keyboard, or a
+  right-click menu, with safe confirmation and undo
 - Switch between Lazarus-style Form and Code views
 - Edit text, state names, sizing, spacing, and common options
 - Assign `OnClick`, `OnChange`, and `OnSubmit` methods in the Events inspector
@@ -42,10 +44,10 @@ before creating files or downloading modules.
 ## Requirements
 
 - Go 1.25 or newer
-- Rosaline v0.16.0 or newer
+- Rosaline v0.16.1 or newer
 - A graphical desktop supported by Rosaline
 
-Rosaline v0.16.0 must exist as a Git tag before a fresh clone can download the
+Rosaline v0.16.1 must exist as a Git tag before a fresh clone can download the
 dependency. If you keep both repositories side by side during development, a
 Go workspace can use your local Rosaline checkout instead.
 
