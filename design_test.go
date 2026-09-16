@@ -12,7 +12,7 @@ import (
 
 func TestDesignRoundTrip(t *testing.T) {
 	project := newProject()
-	project.Title = "Round trip"
+	project.mainForm().Title = "Round trip"
 	path := filepath.Join(t.TempDir(), "nested", "app.rosaline")
 	if err := saveDesign(path, project); err != nil {
 		t.Fatalf("saveDesign: %v", err)
@@ -28,7 +28,8 @@ func TestDesignRoundTrip(t *testing.T) {
 
 func TestAddMoveAndRemoveNodes(t *testing.T) {
 	project := newProject()
-	row, err := project.addNear(project.Root.ID, kindRow)
+	root := project.mainForm().Root
+	row, err := project.addNear(root.ID, kindRow)
 	if err != nil {
 		t.Fatalf("add row: %v", err)
 	}
@@ -36,10 +37,10 @@ func TestAddMoveAndRemoveNodes(t *testing.T) {
 	if err != nil {
 		t.Fatalf("add button: %v", err)
 	}
-	if err := project.moveTo(button.ID, project.Root.Children[0].ID); err != nil {
+	if err := project.moveTo(button.ID, root.Children[0].ID); err != nil {
 		t.Fatalf("move button: %v", err)
 	}
-	if project.parentOf(button.ID) != project.Root {
+	if project.parentOf(button.ID) != root {
 		t.Fatal("button was not moved to the root")
 	}
 	if err := project.remove(button.ID); err != nil {
@@ -52,11 +53,12 @@ func TestAddMoveAndRemoveNodes(t *testing.T) {
 
 func TestAddedComponentsReceiveUniqueNames(t *testing.T) {
 	project := newProject()
-	first, err := project.addNear(project.Root.ID, kindButton)
+	root := project.mainForm().Root
+	first, err := project.addNear(root.ID, kindButton)
 	if err != nil {
 		t.Fatal(err)
 	}
-	second, err := project.addNear(project.Root.ID, kindButton)
+	second, err := project.addNear(root.ID, kindButton)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -67,7 +69,7 @@ func TestAddedComponentsReceiveUniqueNames(t *testing.T) {
 
 func TestDuplicateCopiesSubtreeWithIndependentIdentity(t *testing.T) {
 	project := newProject()
-	layout, err := project.addNear(project.Root.ID, kindColumn)
+	layout, err := project.addNear(project.mainForm().Root.ID, kindColumn)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -114,14 +116,18 @@ func TestVersionTwoDesignWithoutComponentsIsUpgraded(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !validComponentName(project.Root.Component) || !validComponentName(project.Root.Children[0].Component) {
-		t.Fatalf("old design did not receive component names: %#v", project.Root)
+	root := project.mainForm().Root
+	if project.Version != designVersion || project.mainForm().Name != "MainForm" {
+		t.Fatalf("old design did not migrate to a main form: %#v", project)
+	}
+	if !validComponentName(root.Component) || !validComponentName(root.Children[0].Component) {
+		t.Fatalf("old design did not receive component names: %#v", root)
 	}
 }
 
 func TestMoveRejectsCycles(t *testing.T) {
 	project := newProject()
-	row, err := project.addNear(project.Root.ID, kindRow)
+	row, err := project.addNear(project.mainForm().Root.ID, kindRow)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -136,12 +142,11 @@ func TestMoveRejectsCycles(t *testing.T) {
 
 func TestSingleChildContainersAreValidated(t *testing.T) {
 	project := newProject()
-	project.Root = &designNode{
-		ID:   "root",
-		Kind: kindCard,
+	project.mainForm().Root = &designNode{
+		ID: "root", Kind: kindCard, Component: "RootCard",
 		Children: []*designNode{
-			{ID: "one", Kind: kindLabel},
-			{ID: "two", Kind: kindLabel},
+			{ID: "one", Kind: kindLabel, Component: "OneLabel"},
+			{ID: "two", Kind: kindLabel, Component: "TwoLabel"},
 		},
 	}
 	if err := project.validate(); err == nil {
@@ -162,7 +167,7 @@ func TestWelcomeExampleLoads(t *testing.T) {
 	if err != nil {
 		t.Fatalf("load welcome example: %v", err)
 	}
-	if project.Title != "Welcome" || project.find("node-8") == nil {
+	if project.mainForm().Title != "Welcome" || project.find("node-8") == nil {
 		t.Fatalf("unexpected welcome example: %#v", project)
 	}
 }
@@ -188,7 +193,7 @@ func TestVersionOneDesignsAreRejectedClearly(t *testing.T) {
 
 func TestEventValidation(t *testing.T) {
 	project := newProject()
-	project.Root.Children[2].Events[eventClick] = "not-valid!"
+	project.mainForm().Root.Children[2].Events[eventClick] = "not-valid!"
 	if err := project.validate(); err == nil {
 		t.Fatal("invalid handler name was accepted")
 	}
@@ -196,5 +201,52 @@ func TestEventValidation(t *testing.T) {
 	project.Handlers["ContinueClick"] = "if {"
 	if err := project.validate(); err == nil {
 		t.Fatal("invalid event code was accepted")
+	}
+}
+
+func TestFormsCanBeAddedDuplicatedAndRemoved(t *testing.T) {
+	project := newProject()
+	settings := project.addForm()
+	settings.Name = "SettingsForm"
+	settings.Title = "Settings"
+	if _, err := project.addNear(settings.Root.ID, kindButton); err != nil {
+		t.Fatal(err)
+	}
+	pasted, err := project.insertCopy(settings.Root.ID, project.find("node-3"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if project.formContainingNode(pasted.ID) != settings || pasted.Component == "ContinueButton" {
+		t.Fatalf("cross-form paste did not create a unique widget on the destination form: %#v", pasted)
+	}
+	copy, err := project.duplicateForm(settings.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if copy.ID == settings.ID || copy.Name == settings.Name || copy.Root.ID == settings.Root.ID {
+		t.Fatalf("duplicated form retained an identity: %#v", copy)
+	}
+	if project.formContainingNode(copy.Root.ID) != copy {
+		t.Fatal("duplicated form widgets are not associated with the copy")
+	}
+	if err := project.removeForm(settings.ID); err != nil {
+		t.Fatal(err)
+	}
+	if project.form(settings.ID) != nil || len(project.Forms) != 2 {
+		t.Fatalf("form was not removed: %#v", project.Forms)
+	}
+	if err := project.removeForm(project.mainForm().ID); err == nil {
+		t.Fatal("main form deletion was accepted")
+	}
+	if err := project.validate(); err != nil {
+		t.Fatalf("multi-form design is invalid: %v", err)
+	}
+}
+
+func TestWidgetsCannotMoveBetweenForms(t *testing.T) {
+	project := newProject()
+	form := project.addForm()
+	if err := project.moveTo("node-3", form.Root.ID); err == nil || !strings.Contains(err.Error(), "within one form") {
+		t.Fatalf("cross-form move should fail clearly, got %v", err)
 	}
 }

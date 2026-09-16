@@ -40,8 +40,8 @@ func TestGenerateProjectCreatesParseableGoAndPreservesDeveloperFiles(t *testing.
 	if err := os.WriteFile(handlers, handwritten, 0o644); err != nil {
 		t.Fatal(err)
 	}
-	project.Title = "A Changed Title"
-	project.Width = 901
+	project.mainForm().Title = "A Changed Title"
+	project.mainForm().Width = 901
 	report, err = generateProject(project, directory)
 	if err != nil {
 		t.Fatalf("second generation: %v", err)
@@ -67,7 +67,7 @@ func TestGenerateProjectCreatesParseableGoAndPreservesDeveloperFiles(t *testing.
 
 func TestGeneratorCreatesEventMethods(t *testing.T) {
 	project := newProject()
-	project.Root.Children = []*designNode{
+	project.mainForm().Root.Children = []*designNode{
 		{ID: "name", Kind: kindTextBox, Name: "Name", Events: map[string]string{eventSubmit: "SubmitName"}},
 	}
 	project.Handlers = map[string]string{
@@ -93,10 +93,69 @@ func TestGeneratorCreatesEventMethods(t *testing.T) {
 	}
 }
 
+func TestGeneratorCreatesMultipleFormsAndLifecycleEvents(t *testing.T) {
+	project := newProject()
+	main := project.mainForm()
+	settings := project.addForm()
+	settings.Name = "SettingsForm"
+	settings.Title = "Settings"
+	main.Events = map[string]string{eventOpen: "MainFormOpen"}
+	settings.Events = map[string]string{
+		eventOpen:         "SettingsOpen",
+		eventCloseRequest: "SettingsCloseRequest",
+		eventClose:        "SettingsClose",
+	}
+	main.Root.Children[2].Events[eventClick] = "ShowSettings"
+	project.Handlers = map[string]string{
+		"MainFormOpen":         "// Main form mounted.",
+		"SettingsOpen":         "// Settings mounted.",
+		"SettingsCloseRequest": "return true",
+		"SettingsClose":        "// Settings closed.",
+		"ShowSettings":         "app.Windows().SettingsForm.Show()",
+	}
+	directory := t.TempDir()
+	if _, err := generateProject(project, directory); err != nil {
+		t.Fatal(err)
+	}
+	uiData, err := os.ReadFile(filepath.Join(directory, "ui_generated.go"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	stateData, err := os.ReadFile(filepath.Join(directory, "state_generated.go"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	eventsData, err := os.ReadFile(filepath.Join(directory, "events_generated.go"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	ui := string(uiData)
+	state := string(stateData)
+	events := string(eventsData)
+	for _, want := range []string{
+		"generatedWindows.SettingsForm = rosaline.NewWindow",
+		"Parent:         generatedWindows.MainForm",
+		"app.SettingsOpen()",
+		"OnCloseRequest: func() bool { return app.SettingsCloseRequest() }",
+		"func (app *Application) Windows() *UIWindows",
+	} {
+		if !strings.Contains(ui, want) {
+			t.Fatalf("generated UI is missing %q:\n%s", want, ui)
+		}
+	}
+	if !strings.Contains(state, "SettingsForm *rosaline.Window") {
+		t.Fatalf("generated window references are incomplete:\n%s", state)
+	}
+	if !strings.Contains(events, "func (app *Application) SettingsCloseRequest() bool") ||
+		!strings.Contains(events, "app.Windows().SettingsForm.Show()") {
+		t.Fatalf("generated lifecycle handlers are incomplete:\n%s", events)
+	}
+}
+
 func TestGeneratorExposesNamedComponentsToEvents(t *testing.T) {
 	project := newProject()
-	project.Root.Children[2].Component = "SaveButton"
-	project.Root.Children[0].Component = "StatusLabel"
+	project.mainForm().Root.Children[2].Component = "SaveButton"
+	project.mainForm().Root.Children[0].Component = "StatusLabel"
 	project.Handlers["ContinueClick"] = `app.Widgets().StatusLabel.SetText("Saved")
 app.Widgets().SaveButton.SetEnabled(false)`
 	directory := t.TempDir()
@@ -149,7 +208,7 @@ func TestGeneratorCopiesAndEmbedsImageAssets(t *testing.T) {
 		t.Fatal(err)
 	}
 	project := newProject()
-	project.Root.Children = []*designNode{{
+	project.mainForm().Root.Children = []*designNode{{
 		ID: "picture", Kind: kindImage, Text: "A rose", Asset: assetName,
 		Width: 320, Height: 180, Events: map[string]string{eventClick: "PictureClick"},
 	}}
@@ -239,7 +298,7 @@ func TestGeneratorRefusesToReplaceForeignGeneratedFile(t *testing.T) {
 
 func TestGeneratorHandlesEmptyGrid(t *testing.T) {
 	project := newProject()
-	project.Root = &designNode{ID: "root", Kind: kindGrid, Columns: 3}
+	project.mainForm().Root = &designNode{ID: "root", Kind: kindGrid, Component: "MainGrid", Columns: 3}
 	directory := t.TempDir()
 	if _, err := generateProject(project, directory); err != nil {
 		t.Fatalf("generate empty grid: %v", err)
@@ -256,7 +315,7 @@ func TestGeneratorHandlesEmptyGrid(t *testing.T) {
 
 func TestGeneratedStateNamesAreSafeAndUnique(t *testing.T) {
 	project := newProject()
-	project.Root.Children = []*designNode{
+	project.mainForm().Root.Children = []*designNode{
 		{ID: "a", Kind: kindTextBox, Name: "display name"},
 		{ID: "b", Kind: kindTextArea, Name: "display-name"},
 		{ID: "c", Kind: kindCheckBox, Name: "123"},
@@ -290,8 +349,18 @@ func TestGeneratedApplicationBuilds(t *testing.T) {
 	}
 	directory := t.TempDir()
 	project := newProject()
+	secondary := project.addForm()
+	secondary.Name = "SettingsForm"
+	secondary.Events = map[string]string{
+		eventOpen:         "SettingsOpen",
+		eventCloseRequest: "AllowSettingsClose",
+		eventClose:        "SettingsClose",
+	}
+	project.Handlers["SettingsOpen"] = "// Opened."
+	project.Handlers["AllowSettingsClose"] = "return true"
+	project.Handlers["SettingsClose"] = "// Closed."
 	for _, kind := range paletteKinds {
-		if _, err := project.addNear(project.Root.ID, kind); err != nil {
+		if _, err := project.addNear(project.mainForm().Root.ID, kind); err != nil {
 			t.Fatalf("add %s: %v", kind, err)
 		}
 	}

@@ -9,7 +9,7 @@ import (
 
 func TestPreviewContainsEveryDesignNode(t *testing.T) {
 	project := newProject()
-	boxes := layoutPreview(project)
+	boxes := layoutPreview(project.mainForm())
 	if len(boxes) != 4 {
 		t.Fatalf("want 4 preview boxes, got %d", len(boxes))
 	}
@@ -22,7 +22,7 @@ func TestPreviewContainsEveryDesignNode(t *testing.T) {
 
 func TestPreviewUsesNaturalControlHeights(t *testing.T) {
 	project := newProject()
-	boxes := layoutPreview(project)
+	boxes := layoutPreview(project.mainForm())
 	if boxes[1].Rect.Height > 32 {
 		t.Fatalf("label was stretched to %.1f pixels", boxes[1].Rect.Height)
 	}
@@ -41,12 +41,12 @@ func TestPreviewUsesNaturalControlHeights(t *testing.T) {
 
 func TestExpandedControlAbsorbsRemainingHeight(t *testing.T) {
 	project := newProject()
-	project.Root.Children = []*designNode{
-		{ID: "label", Kind: kindLabel, Text: "Notes"},
-		{ID: "notes", Kind: kindTextArea, Name: "Notes", Expand: true},
-		{ID: "save", Kind: kindButton, Text: "Save"},
+	project.mainForm().Root.Children = []*designNode{
+		{ID: "label", Kind: kindLabel, Component: "NotesLabel", Text: "Notes"},
+		{ID: "notes", Kind: kindTextArea, Component: "NotesTextArea", Name: "Notes", Expand: true},
+		{ID: "save", Kind: kindButton, Component: "SaveButton", Text: "Save"},
 	}
-	boxes := layoutPreview(project)
+	boxes := layoutPreview(project.mainForm())
 	if boxes[2].Rect.Height <= boxes[3].Rect.Height*2 {
 		t.Fatalf("expanded text area did not receive remaining height: %.1f versus %.1f", boxes[2].Rect.Height, boxes[3].Rect.Height)
 	}
@@ -54,10 +54,11 @@ func TestExpandedControlAbsorbsRemainingHeight(t *testing.T) {
 
 func TestPreviewReflectsApplicationResolution(t *testing.T) {
 	project := newProject()
-	project.Width, project.Height = 1200, 400
-	wide := previewWindowBounds(project)
-	project.Width, project.Height = 400, 1000
-	tall := previewWindowBounds(project)
+	form := project.mainForm()
+	form.Width, form.Height = 1200, 400
+	wide := previewWindowBounds(form)
+	form.Width, form.Height = 400, 1000
+	tall := previewWindowBounds(form)
 	if wide.Width <= wide.Height {
 		t.Fatalf("wide resolution produced non-wide preview: %#v", wide)
 	}
@@ -71,7 +72,7 @@ func TestPreviewReflectsApplicationResolution(t *testing.T) {
 
 func TestPreviewHitTestingPrefersDeepestWidget(t *testing.T) {
 	project := newProject()
-	boxes := layoutPreview(project)
+	boxes := layoutPreview(project.mainForm())
 	child := boxes[1]
 	x := child.Rect.X + child.Rect.Width/2
 	y := child.Rect.Y + child.Rect.Height/2

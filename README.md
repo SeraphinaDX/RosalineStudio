@@ -10,8 +10,11 @@ Rosaline Studio is itself a pure-Go Rosaline application. It builds with
 
 ![Screenshot](rosaline-studio.avif)
 
-## What v0.3.0 can do
+## What v0.4.0 can do
 
+- Design a primary form and any number of reusable secondary forms
+- Create, duplicate, rename, select, configure, and delete forms from the
+  project panel
 - Add controls and layouts from a compact widget palette
 - Select widgets from the hierarchy or the visual preview
 - Drag widgets onto a container or sibling to rearrange the design
@@ -26,7 +29,8 @@ Rosaline Studio is itself a pure-Go Rosaline application. It builds with
 - Write event bodies in the integrated Go editor with syntax validation
 - Import PNG, JPEG, GIF, BMP, TIFF, WebP, and AVIF pictures
 - Preview, size, and embed image assets in generated applications
-- Configure the application title, module path, window size, and theme
+- Configure each form's title, window size, padding, and theme
+- Assign form `OnOpen`, `OnCloseRequest`, and `OnClose` methods
 - Undo and redo up to 100 design changes
 - Save strict, readable `.rosaline` design files
 - Generate and run a complete Rosaline Go application
@@ -46,10 +50,10 @@ before creating files or downloading modules.
 ## Requirements
 
 - Go 1.25 or newer
-- Rosaline v0.17.0 or newer
+- Rosaline v0.18.0 or newer
 - A graphical desktop supported by Rosaline
 
-Rosaline v0.17.0 must exist as a Git tag before a fresh clone can download the
+Rosaline v0.18.0 must exist as a Git tag before a fresh clone can download the
 dependency. If you keep both repositories side by side during development, a
 Go workspace can use your local Rosaline checkout instead.
 
@@ -115,10 +119,23 @@ func (app *Application) SaveButtonClick() {
 Choose memorable component names such as `StatusLabel` and `SaveButton` in the
 Properties inspector. Older version-2 designs receive safe names automatically.
 
+Every designed form has a typed reusable window reference as well. For
+example, a button event on the main form can open a secondary form with:
+
+```go
+app.Windows().SettingsForm.Show()
+```
+
+The same handle supports `Close`, `Focus`, `SetTitle`, and `IsOpen`. Select a
+form's root layout to edit its lifecycle events in the Events inspector.
+
 Studio stores event bodies in the `.rosaline` design and regenerates
 `events_generated.go`. Put reusable helpers, services, imports, and non-visual
 logic in developer-owned `handlers.go` or another Go file. Adding or removing a
 designer field cannot erase those files.
+
+See [Designing multiple forms](docs/MULTIPLE_FORMS.md) for the complete form
+workflow and lifecycle-event model.
 
 ## Supported designer widgets
 
@@ -154,11 +171,11 @@ env CGO_ENABLED=0 ROSALINE_SOURCE=../Rosaline go test ./...
 
 ## Project status
 
-Rosaline Studio v0.3.0 is an intentionally small early release. Generated code
+Rosaline Studio v0.4.0 is an intentionally small early release. Generated code
 and saved designs are designed to stay understandable while the visual tooling
 grows. The design schema is versioned, but the Studio API and file format remain
-experimental until v1.0. Version-1 design files are intentionally incompatible
-with the cleaner event model in version 2.
+experimental until v1.0. Studio automatically migrates version-2 single-form
+designs to version 3; version-1 designs remain intentionally incompatible.
 
 ## License
 

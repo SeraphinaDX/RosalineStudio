@@ -1,25 +1,41 @@
 # Rosaline design format
 
 Rosaline Studio stores visual projects as UTF-8 JSON files ending in
-`.rosaline`. The current schema version is `2`.
+`.rosaline`. The current schema version is `3`.
 
 ## Project fields
 
 | Field | Type | Meaning |
 |---|---|---|
-| `version` | integer | Design schema version; currently `2` |
+| `version` | integer | Design schema version; currently `3` |
 | `module` | string | Generated Go module path |
-| `title` | string | Application window title |
-| `width` | integer | Initial window width in pixels |
-| `height` | integer | Initial window height in pixels |
+| `forms` | form array | Primary form first, followed by reusable secondary forms |
+| `handlers` | object | Go event bodies keyed by handler method name |
+
+The first item in `forms` is always the primary application window. It cannot
+be deleted. Other forms generate as reusable `rosaline.Window` handles owned
+by the primary form.
+
+## Form fields
+
+| Field | Type | Meaning |
+|---|---|---|
+| `id` | string | Stable internal form identity |
+| `name` | string | Unique exported Go name used by `app.Windows()` |
+| `title` | string | Native window title |
+| `width`, `height` | integer | Initial window size in pixels |
 | `padding` | integer | Window content padding |
 | `theme` | string | `Rosaline`, `Lavender`, or `Midnight` |
-| `root` | widget | Root layout widget |
-| `handlers` | object | Go event bodies keyed by handler method name |
+| `root` | widget | Root layout for this form |
+| `events` | object | `OnOpen`, `OnCloseRequest`, or `OnClose` handler methods |
+
+`OnCloseRequest` is the one boolean event. Its handler must return `true` to
+allow the close or `false` to keep the form open. Other form and widget event
+handlers do not return a value.
 
 ## Widget fields
 
-Every widget has a unique internal `id`, a `kind`, and an exported Go
+Every widget has a globally unique internal `id`, a `kind`, and an exported Go
 `component` name. Fields that do not apply to a widget are omitted when empty.
 
 | Field | Used by | Meaning |
@@ -42,8 +58,8 @@ Every widget has a unique internal `id`, a `kind`, and an exported Go
 | `vertical` | sliders/progress | Use vertical orientation |
 
 Component names are exported Go identifiers such as `SaveButton`. They are
-available to event code through `app.Widgets().SaveButton`. Studio fills in
-missing component names when opening an older version-2 design.
+available to event code through `app.Widgets().SaveButton`. Form names work the
+same way through `app.Windows().SettingsForm`.
 
 State names are converted to exported Go identifiers. Duplicate names gain a
 numeric suffix. For example, `display name` and `display-name` become
@@ -53,62 +69,71 @@ numeric suffix. For example, `display name` and `display-name` become
 
 ```json
 {
-  "version": 2,
+  "version": 3,
   "module": "example.com/greeting",
-  "title": "Greeting",
-  "width": 720,
-  "height": 520,
-  "padding": 16,
-  "theme": "Lavender",
-  "handlers": {
-    "GreetClick": "rosaline.Message(\"Hello\", \"Welcome, \"+app.State.Name+\"!\")"
-  },
-  "root": {
-    "id": "root",
-    "kind": "Column",
-    "component": "MainLayout",
-    "children": [
-      {
-        "id": "node-1",
-        "kind": "Label",
-        "component": "QuestionLabel",
-        "text": "What is your name?",
-        "bold": true
-      },
-      {
-        "id": "node-2",
-        "kind": "TextBox",
-        "component": "NameTextBox",
-        "text": "Your name",
-        "name": "Name"
-      },
-      {
-        "id": "node-3",
-        "kind": "Button",
-        "component": "GreetButton",
-        "text": "Say hello",
-        "events": {
-          "OnClick": "GreetClick"
-        },
-        "primary": true
+  "forms": [
+    {
+      "id": "form-1",
+      "name": "MainForm",
+      "title": "Greeting",
+      "width": 720,
+      "height": 520,
+      "padding": 16,
+      "theme": "Lavender",
+      "root": {
+        "id": "root",
+        "kind": "Column",
+        "component": "MainLayout",
+        "children": [
+          {
+            "id": "node-1",
+            "kind": "Button",
+            "component": "SettingsButton",
+            "text": "Settings",
+            "events": {"OnClick": "ShowSettings"}
+          }
+        ],
+        "gap": 10,
+        "padding": 12,
+        "expand": true
       }
-    ],
-    "gap": 10,
-    "padding": 12,
-    "expand": true
+    },
+    {
+      "id": "form-2",
+      "name": "SettingsForm",
+      "title": "Settings",
+      "width": 560,
+      "height": 400,
+      "padding": 16,
+      "theme": "Rosaline",
+      "events": {"OnCloseRequest": "AllowSettingsClose"},
+      "root": {
+        "id": "node-2",
+        "kind": "Column",
+        "component": "SettingsLayout",
+        "gap": 10,
+        "padding": 12,
+        "expand": true
+      }
+    }
+  ],
+  "handlers": {
+    "ShowSettings": "app.Windows().SettingsForm.Show()",
+    "AllowSettingsClose": "return true"
   }
 }
 ```
 
 ## Compatibility and validation
 
-Studio rejects unknown JSON fields, unknown widget kinds, repeated IDs or
-component names,
-children inside non-container controls, and more than one child in a `Card` or
-`Scroll`. It also validates event names, handler identifiers, and Go syntax.
-Strict loading catches typing mistakes rather than silently losing design data.
+Studio rejects unknown JSON fields, unknown widget kinds, repeated form or
+widget IDs, repeated form or component names, children inside non-container
+controls, and more than one child in a `Card` or `Scroll`. It validates event
+names, handler identifiers, handler return shape, and Go syntax. Widget moves
+stay within a form, while copy and paste can safely cross forms.
 
-Version-1 designs used a generic string action dispatcher and are intentionally
-not compatible with version 2. Future schema changes will continue to use the
-top-level version number. Commit design files to Git before opening important
-work in a newer Studio version.
+Studio automatically migrates a version-2 single-form design to version 3 as
+a `MainForm`; save the file to keep the upgraded structure. Version-1 designs
+used a generic string action dispatcher and remain intentionally incompatible.
+Commit important design files to Git before opening them in a newer Studio
+version.
