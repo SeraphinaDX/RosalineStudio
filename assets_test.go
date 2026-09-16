@@ -25,7 +25,7 @@ func TestCopyDesignAssetsFollowsSaveAs(t *testing.T) {
 	oldPath := filepath.Join(directory, "old.rosaline")
 	newPath := filepath.Join(directory, "new.rosaline")
 	project := newProject()
-	project.Root.Children = []*designNode{{ID: "picture", Kind: kindImage, Asset: "rose.png"}}
+	project.mainForm().Root.Children = []*designNode{{ID: "picture", Kind: kindImage, Component: "Picture", Asset: "rose.png"}}
 	if err := os.MkdirAll(designAssetDirectory(oldPath), 0o755); err != nil {
 		t.Fatal(err)
 	}

@@ -9,14 +9,15 @@ import (
 
 func TestSelectionAfterRemovalPrefersNearbyWidget(t *testing.T) {
 	project := newProject()
+	root := project.mainForm().Root
 	if got := project.selectionAfterRemoval("node-2"); got != "node-3" {
 		t.Fatalf("middle widget should select its next sibling, got %q", got)
 	}
 	if got := project.selectionAfterRemoval("node-3"); got != "node-2" {
 		t.Fatalf("last widget should select its previous sibling, got %q", got)
 	}
-	project.Root.Children = project.Root.Children[:1]
-	if got := project.selectionAfterRemoval("node-1"); got != project.Root.ID {
+	root.Children = root.Children[:1]
+	if got := project.selectionAfterRemoval("node-1"); got != root.ID {
 		t.Fatalf("only child should select its parent, got %q", got)
 	}
 }
@@ -52,7 +53,7 @@ func TestDeleteSelectedPreservesHandlerAndCanBeUndone(t *testing.T) {
 
 func TestDeletePopulatedLayoutRequiresConfirmation(t *testing.T) {
 	studio := newStudio()
-	layout, err := studio.project.addNear(studio.project.Root.ID, kindColumn)
+	layout, err := studio.project.addNear(studio.project.mainForm().Root.ID, kindColumn)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -89,7 +90,7 @@ func TestRootLayoutCannotBeDeleted(t *testing.T) {
 		t.Fatal("root deletion should be rejected before confirmation")
 		return true
 	})
-	if studio.project.Root == nil || !strings.Contains(studio.status, "root layout") {
+	if studio.project.mainForm().Root == nil || !strings.Contains(studio.status, "root layout") {
 		t.Fatalf("root deletion was not safely rejected: %q", studio.status)
 	}
 }

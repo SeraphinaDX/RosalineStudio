@@ -14,7 +14,7 @@ import (
 	"unicode/utf8"
 )
 
-const designVersion = 2
+const designVersion = 3
 
 type widgetKind string
 
@@ -84,6 +84,25 @@ type designNode struct {
 type designProject struct {
 	Version  int               `json:"version"`
 	Module   string            `json:"module"`
+	Forms    []*designForm     `json:"forms"`
+	Handlers map[string]string `json:"handlers,omitempty"`
+}
+
+type designForm struct {
+	ID      string            `json:"id"`
+	Name    string            `json:"name"`
+	Title   string            `json:"title"`
+	Width   int               `json:"width"`
+	Height  int               `json:"height"`
+	Padding int               `json:"padding"`
+	Theme   string            `json:"theme"`
+	Root    *designNode       `json:"root"`
+	Events  map[string]string `json:"events,omitempty"`
+}
+
+type legacyDesignProject struct {
+	Version  int               `json:"version"`
+	Module   string            `json:"module"`
 	Title    string            `json:"title"`
 	Width    int               `json:"width"`
 	Height   int               `json:"height"`
@@ -97,27 +116,66 @@ func newProject() *designProject {
 	return &designProject{
 		Version: designVersion,
 		Module:  "example.com/myapp",
-		Title:   "My Rosaline App",
-		Width:   720,
-		Height:  520,
-		Padding: 16,
-		Theme:   "Rosaline",
 		Handlers: map[string]string{
 			"ContinueClick": `rosaline.Message("Your application", "Continue clicked.")`,
 		},
-		Root: &designNode{
-			ID:        "root",
-			Kind:      kindColumn,
-			Component: "MainLayout",
-			Gap:       10,
-			Padding:   12,
-			Expand:    true,
-			Children: []*designNode{
-				{ID: "node-1", Kind: kindLabel, Component: "WelcomeLabel", Text: "Welcome to Rosaline", Bold: true},
-				{ID: "node-2", Kind: kindTextBox, Component: "NameTextBox", Text: "Your name", Name: "Name"},
-				{ID: "node-3", Kind: kindButton, Component: "ContinueButton", Text: "Continue", Events: map[string]string{"OnClick": "ContinueClick"}, Primary: true},
+		Forms: []*designForm{
+			{
+				ID: "form-1", Name: "MainForm", Title: "My Rosaline App",
+				Width: 720, Height: 520, Padding: 16, Theme: "Rosaline",
+				Root: &designNode{
+					ID: "root", Kind: kindColumn, Component: "MainLayout",
+					Gap: 10, Padding: 12, Expand: true,
+					Children: []*designNode{
+						{ID: "node-1", Kind: kindLabel, Component: "WelcomeLabel", Text: "Welcome to Rosaline", Bold: true},
+						{ID: "node-2", Kind: kindTextBox, Component: "NameTextBox", Text: "Your name", Name: "Name"},
+						{ID: "node-3", Kind: kindButton, Component: "ContinueButton", Text: "Continue", Events: map[string]string{"OnClick": "ContinueClick"}, Primary: true},
+					},
+				},
 			},
 		},
+	}
+}
+
+func (project *designProject) mainForm() *designForm {
+	if project == nil || len(project.Forms) == 0 {
+		return nil
+	}
+	return project.Forms[0]
+}
+
+func (project *designProject) form(id string) *designForm {
+	if project == nil {
+		return nil
+	}
+	for _, form := range project.Forms {
+		if form != nil && form.ID == id {
+			return form
+		}
+	}
+	return nil
+}
+
+func (project *designProject) formContainingNode(id string) *designForm {
+	if project == nil {
+		return nil
+	}
+	for _, form := range project.Forms {
+		if form != nil && findNode(form.Root, id) != nil {
+			return form
+		}
+	}
+	return nil
+}
+
+func (project *designProject) visitRoots(visit func(*designNode)) {
+	if project == nil {
+		return
+	}
+	for _, form := range project.Forms {
+		if form != nil {
+			visit(form.Root)
+		}
 	}
 }
 
@@ -181,7 +239,14 @@ func (project *designProject) find(id string) *designNode {
 	if project == nil {
 		return nil
 	}
-	return findNode(project.Root, id)
+	for _, form := range project.Forms {
+		if form != nil {
+			if found := findNode(form.Root, id); found != nil {
+				return found
+			}
+		}
+	}
+	return nil
 }
 
 func findNode(node *designNode, id string) *designNode {
@@ -200,10 +265,18 @@ func findNode(node *designNode, id string) *designNode {
 }
 
 func (project *designProject) parentOf(id string) *designNode {
-	if project == nil || project.Root == nil || project.Root.ID == id {
+	if project == nil {
 		return nil
 	}
-	return findParent(project.Root, id)
+	for _, form := range project.Forms {
+		if form == nil || form.Root == nil || form.Root.ID == id {
+			continue
+		}
+		if found := findParent(form.Root, id); found != nil {
+			return found
+		}
+	}
+	return nil
 }
 
 func findParent(node *designNode, id string) *designNode {
@@ -237,14 +310,19 @@ func (project *designProject) nextID() string {
 			visit(child)
 		}
 	}
-	visit(project.Root)
+	project.visitRoots(visit)
 	return fmt.Sprintf("node-%d", maximum+1)
 }
 
 func (project *designProject) addNear(selectedID string, kind widgetKind) (*designNode, error) {
 	selected := project.find(selectedID)
 	if selected == nil {
-		selected = project.Root
+		if main := project.mainForm(); main != nil {
+			selected = main.Root
+		}
+	}
+	if selected == nil {
+		return nil, errors.New("the project has no form")
 	}
 	parent := selected
 	if !parent.Kind.container() {
@@ -262,6 +340,91 @@ func (project *designProject) addNear(selectedID string, kind widgetKind) (*desi
 	return node, nil
 }
 
+func (project *designProject) isFormRoot(id string) bool {
+	form := project.formContainingNode(id)
+	return form != nil && form.Root != nil && form.Root.ID == id
+}
+
+func (project *designProject) nextFormID() string {
+	maximum := 0
+	for _, form := range project.Forms {
+		if form != nil && strings.HasPrefix(form.ID, "form-") {
+			if value, err := strconv.Atoi(strings.TrimPrefix(form.ID, "form-")); err == nil {
+				maximum = max(maximum, value)
+			}
+		}
+	}
+	return fmt.Sprintf("form-%d", maximum+1)
+}
+
+func (project *designProject) nextFormName(base string) string {
+	used := make(map[string]bool)
+	for _, form := range project.Forms {
+		if form != nil {
+			used[form.Name] = true
+		}
+	}
+	return uniqueGeneratedName(exportedIdentifier(base), used)
+}
+
+func (project *designProject) addForm() *designForm {
+	name := project.nextFormName("Form2")
+	form := &designForm{
+		ID: project.nextFormID(), Name: name, Title: "New Form",
+		Width: 640, Height: 420, Padding: 16, Theme: "Rosaline",
+		Root: &designNode{
+			ID: project.nextID(), Kind: kindColumn,
+			Component: project.nextComponentNameFor(name + "Layout"),
+			Gap:       10, Padding: 12, Expand: true,
+		},
+	}
+	project.Forms = append(project.Forms, form)
+	return form
+}
+
+func (project *designProject) duplicateForm(id string) (*designForm, error) {
+	source := project.form(id)
+	if source == nil {
+		return nil, errors.New("form was not found")
+	}
+	clone := *source
+	clone.ID = project.nextFormID()
+	clone.Name = project.nextFormName(source.Name)
+	clone.Title = source.Title + " Copy"
+	clone.Root = cloneDesignNode(source.Root)
+	clone.Events = cloneStringMap(source.Events)
+	project.prepareCopiedSubtree(clone.Root)
+	project.Forms = append(project.Forms, &clone)
+	return &clone, nil
+}
+
+func (project *designProject) removeForm(id string) error {
+	if project == nil || len(project.Forms) == 0 {
+		return errors.New("the project has no forms")
+	}
+	if project.Forms[0] != nil && project.Forms[0].ID == id {
+		return errors.New("the main form cannot be deleted")
+	}
+	for index, form := range project.Forms {
+		if form != nil && form.ID == id {
+			project.Forms = append(project.Forms[:index], project.Forms[index+1:]...)
+			return nil
+		}
+	}
+	return errors.New("form was not found")
+}
+
+func cloneStringMap(source map[string]string) map[string]string {
+	if source == nil {
+		return nil
+	}
+	clone := make(map[string]string, len(source))
+	for key, value := range source {
+		clone[key] = value
+	}
+	return clone
+}
+
 func cloneDesignNode(node *designNode) *designNode {
 	if node == nil {
 		return nil
@@ -269,12 +432,7 @@ func cloneDesignNode(node *designNode) *designNode {
 	clone := *node
 	clone.Options = append([]string(nil), node.Options...)
 	clone.Children = make([]*designNode, 0, len(node.Children))
-	if node.Events != nil {
-		clone.Events = make(map[string]string, len(node.Events))
-		for event, handler := range node.Events {
-			clone.Events[event] = handler
-		}
-	}
+	clone.Events = cloneStringMap(node.Events)
 	for _, child := range node.Children {
 		clone.Children = append(clone.Children, cloneDesignNode(child))
 	}
@@ -285,12 +443,12 @@ func cloneDesignNode(node *designNode) *designNode {
 // after a selected control. IDs, component names, and bound state names are
 // made unique while event handler assignments remain shared intentionally.
 func (project *designProject) insertCopy(selectedID string, source *designNode) (*designNode, error) {
-	if project == nil || project.Root == nil || source == nil {
+	if project == nil || project.mainForm() == nil || source == nil {
 		return nil, errors.New("there is no copied widget to paste")
 	}
 	selected := project.find(selectedID)
 	if selected == nil {
-		selected = project.Root
+		selected = project.mainForm().Root
 	}
 	parent := selected
 	insertIndex := len(parent.Children)
@@ -323,7 +481,7 @@ func (project *designProject) duplicate(id string) (*designNode, error) {
 	if node == nil {
 		return nil, errors.New("select a widget before duplicating")
 	}
-	if node == project.Root {
+	if project.isFormRoot(node.ID) {
 		return nil, errors.New("the root layout cannot be duplicated")
 	}
 	parent := project.parentOf(id)
@@ -370,7 +528,7 @@ func (project *designProject) prepareCopiedSubtree(node *designNode) {
 			collect(child)
 		}
 	}
-	collect(project.Root)
+	project.visitRoots(collect)
 
 	var prepare func(*designNode)
 	prepare = func(current *designNode) {
@@ -421,6 +579,14 @@ func uniqueGeneratedName(base string, used map[string]bool) string {
 }
 
 func (project *designProject) nextComponentName(kind widgetKind) string {
+	return nextAvailableName(exportedIdentifier(string(kind)), project.usedComponentNames())
+}
+
+func (project *designProject) nextComponentNameFor(base string) string {
+	return uniqueGeneratedName(exportedIdentifier(base), project.usedComponentNames())
+}
+
+func (project *designProject) usedComponentNames() map[string]bool {
 	used := make(map[string]bool)
 	var visit func(*designNode)
 	visit = func(node *designNode) {
@@ -435,9 +601,9 @@ func (project *designProject) nextComponentName(kind widgetKind) string {
 		}
 	}
 	if project != nil {
-		visit(project.Root)
+		project.visitRoots(visit)
 	}
-	return nextAvailableName(exportedIdentifier(string(kind)), used)
+	return used
 }
 
 func nextAvailableName(base string, used map[string]bool) string {
@@ -476,13 +642,13 @@ func (project *designProject) componentNameInUse(name, exceptID string) bool {
 		}
 	}
 	if project != nil {
-		visit(project.Root)
+		project.visitRoots(visit)
 	}
 	return found
 }
 
 func (project *designProject) ensureComponentNames() {
-	if project == nil || project.Root == nil {
+	if project == nil || project.mainForm() == nil {
 		return
 	}
 	used := make(map[string]bool)
@@ -498,7 +664,7 @@ func (project *designProject) ensureComponentNames() {
 			collect(child)
 		}
 	}
-	collect(project.Root)
+	project.visitRoots(collect)
 	var fill func(*designNode)
 	fill = func(node *designNode) {
 		if node == nil {
@@ -511,11 +677,11 @@ func (project *designProject) ensureComponentNames() {
 			fill(child)
 		}
 	}
-	fill(project.Root)
+	project.visitRoots(fill)
 }
 
 func (project *designProject) remove(id string) error {
-	if project == nil || project.Root == nil || id == project.Root.ID {
+	if project == nil || project.mainForm() == nil || project.isFormRoot(id) {
 		return errors.New("the root layout cannot be deleted")
 	}
 	parent := project.parentOf(id)
@@ -535,12 +701,15 @@ func (project *designProject) remove(id string) error {
 // visual editor: the next sibling, the previous sibling, or finally the
 // parent when the removed node was its only child.
 func (project *designProject) selectionAfterRemoval(id string) string {
-	if project == nil || project.Root == nil {
+	if project == nil || project.mainForm() == nil {
 		return ""
 	}
 	parent := project.parentOf(id)
 	if parent == nil {
-		return project.Root.ID
+		if form := project.formContainingNode(id); form != nil && form.Root != nil {
+			return form.Root.ID
+		}
+		return project.mainForm().Root.ID
 	}
 	for index, child := range parent.Children {
 		if child == nil || child.ID != id {
@@ -591,11 +760,14 @@ func (project *designProject) moveBy(id string, difference int) error {
 }
 
 func (project *designProject) moveTo(id, targetID string) error {
-	if id == "" || targetID == "" || id == targetID || project.Root == nil || id == project.Root.ID {
+	if id == "" || targetID == "" || id == targetID || project.mainForm() == nil || project.isFormRoot(id) {
 		return errors.New("choose a different destination")
 	}
 	moving := project.find(id)
 	target := project.find(targetID)
+	if project.formContainingNode(id) != project.formContainingNode(targetID) {
+		return errors.New("move widgets within one form; use copy and paste between forms")
+	}
 	oldParent := project.parentOf(id)
 	if moving == nil || target == nil || oldParent == nil {
 		return errors.New("widget was not found")
@@ -644,8 +816,8 @@ func (project *designProject) moveTo(id, targetID string) error {
 }
 
 func (project *designProject) validate() error {
-	if project == nil || project.Root == nil {
-		return errors.New("the design has no root layout")
+	if project == nil || len(project.Forms) == 0 {
+		return errors.New("the design has no forms")
 	}
 	if project.Version != designVersion {
 		return fmt.Errorf("unsupported design version %d", project.Version)
@@ -655,10 +827,10 @@ func (project *designProject) validate() error {
 	}
 	seen := make(map[string]bool)
 	components := make(map[string]bool)
-	for name, body := range project.Handlers {
-		if err := validateHandler(name, body); err != nil {
-			return err
-		}
+	formIDs := make(map[string]bool)
+	formNames := make(map[string]bool)
+	if err := validateProjectHandlers(project); err != nil {
+		return err
 	}
 	var visit func(*designNode) error
 	visit = func(node *designNode) error {
@@ -703,7 +875,34 @@ func (project *designProject) validate() error {
 		}
 		return nil
 	}
-	return visit(project.Root)
+	for index, form := range project.Forms {
+		if form == nil || form.Root == nil {
+			return fmt.Errorf("form %d has no root layout", index+1)
+		}
+		if strings.TrimSpace(form.ID) == "" || formIDs[form.ID] {
+			return fmt.Errorf("form ID %q is empty or repeated", form.ID)
+		}
+		formIDs[form.ID] = true
+		if !validComponentName(form.Name) || formNames[form.Name] {
+			return fmt.Errorf("form name %q is invalid or repeated", form.Name)
+		}
+		formNames[form.Name] = true
+		if strings.TrimSpace(form.Title) == "" {
+			return fmt.Errorf("form %s has an empty title", form.Name)
+		}
+		for event, handler := range form.Events {
+			if !supportsFormEvent(event) {
+				return fmt.Errorf("form %s does not support event %q", form.Name, event)
+			}
+			if !validHandlerName(handler) {
+				return fmt.Errorf("form %s has invalid handler name %q", form.Name, handler)
+			}
+		}
+		if err := visit(form.Root); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func knownKind(kind widgetKind) bool {
@@ -738,20 +937,62 @@ func loadDesign(path string) (*designProject, error) {
 	if err != nil {
 		return nil, fmt.Errorf("read design: %w", err)
 	}
-	var project designProject
-	decoder := json.NewDecoder(strings.NewReader(string(data)))
-	decoder.DisallowUnknownFields()
-	if err := decoder.Decode(&project); err != nil {
+	var header struct {
+		Version int `json:"version"`
+	}
+	if err := json.Unmarshal(data, &header); err != nil {
 		return nil, fmt.Errorf("decode design: %w", err)
 	}
-	if project.Handlers == nil {
-		project.Handlers = make(map[string]string)
+	var project designProject
+	switch header.Version {
+	case 2:
+		var legacy legacyDesignProject
+		if err := decodeStrict(data, &legacy); err != nil {
+			return nil, err
+		}
+		project = designProject{
+			Version: designVersion,
+			Module:  legacy.Module,
+			Forms: []*designForm{{
+				ID: "form-1", Name: "MainForm", Title: legacy.Title,
+				Width: legacy.Width, Height: legacy.Height, Padding: legacy.Padding,
+				Theme: legacy.Theme, Root: legacy.Root,
+			}},
+			Handlers: legacy.Handlers,
+		}
+	case designVersion:
+		if err := decodeStrict(data, &project); err != nil {
+			return nil, err
+		}
+	default:
+		return nil, fmt.Errorf("unsupported design version %d", header.Version)
 	}
+	project.normalize()
 	project.ensureComponentNames()
 	if err := project.validate(); err != nil {
 		return nil, err
 	}
 	return &project, nil
+}
+
+func decodeStrict(data []byte, target any) error {
+	decoder := json.NewDecoder(strings.NewReader(string(data)))
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(target); err != nil {
+		return fmt.Errorf("decode design: %w", err)
+	}
+	return nil
+}
+
+func (project *designProject) normalize() {
+	if project.Handlers == nil {
+		project.Handlers = make(map[string]string)
+	}
+	for _, form := range project.Forms {
+		if form != nil && form.Theme == "" {
+			form.Theme = "Rosaline"
+		}
+	}
 }
 
 func designSnapshot(project *designProject) []byte {
@@ -764,6 +1005,7 @@ func restoreSnapshot(data []byte) (*designProject, error) {
 	if err := json.Unmarshal(data, &project); err != nil {
 		return nil, err
 	}
+	project.normalize()
 	project.ensureComponentNames()
 	if err := project.validate(); err != nil {
 		return nil, err

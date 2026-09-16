@@ -39,6 +39,7 @@ type inspectorState struct {
 }
 
 type projectInspectorState struct {
+	Name    string
 	Title   string
 	Module  string
 	Width   string
@@ -50,6 +51,7 @@ type projectInspectorState struct {
 type studio struct {
 	project    *designProject
 	path       string
+	formID     string
 	selectedID string
 	dirty      bool
 	status     string
@@ -58,6 +60,9 @@ type studio struct {
 	settings  projectInspectorState
 
 	palette    *rosaline.ListWidget
+	formList   *rosaline.ListWidget
+	formIDs    []string
+	syncForm   bool
 	tree       *rosaline.TreeWidget
 	canvas     *rosaline.CanvasWidget
 	workspace  *rosaline.TabsWidget
@@ -71,6 +76,7 @@ type studio struct {
 	selectedEvent   int
 	eventHandler    string
 	codeHandler     string
+	codeReturnsBool bool
 	codeBody        string
 	previewPictures map[string]*rosaline.Picture
 
@@ -86,9 +92,11 @@ type studio struct {
 
 func newStudio() *studio {
 	project := newProject()
+	main := project.mainForm()
 	result := &studio{
 		project:         project,
-		selectedID:      project.Root.ID,
+		formID:          main.ID,
+		selectedID:      main.Root.ID,
 		status:          "Ready - double-click a palette item to add it",
 		selectedEvent:   -1,
 		previewPictures: make(map[string]*rosaline.Picture),
@@ -99,18 +107,26 @@ func newStudio() *studio {
 }
 
 func (studio *studio) run() {
+	studio.formList = rosaline.List().Size(21, 4)
+	studio.formList.OnSelect(func(index int, _ string) {
+		if studio.syncForm || index < 0 || index >= len(studio.formIDs) {
+			return
+		}
+		studio.selectForm(studio.formIDs[index])
+	})
+
 	paletteNames := make([]string, len(paletteKinds))
 	for index, kind := range paletteKinds {
 		paletteNames[index] = string(kind)
 	}
-	studio.palette = rosaline.List(paletteNames...).Size(21, 10)
+	studio.palette = rosaline.List(paletteNames...).Size(21, 7)
 	studio.palette.OnActivate(func(index int, _ string) {
 		if index >= 0 && index < len(paletteKinds) {
 			studio.addWidget(paletteKinds[index])
 		}
 	})
 
-	studio.tree = rosaline.Tree().Width(220).Height(14).Expand()
+	studio.tree = rosaline.Tree().Width(220).Height(10).Expand()
 	studio.tree.OnSelect(func(node *rosaline.TreeNode) {
 		if studio.syncTree || node == nil {
 			return
@@ -121,13 +137,14 @@ func (studio *studio) run() {
 	studio.tree.ContextMenu(studio.widgetContextEntries()...)
 
 	studio.canvas = rosaline.Canvas(func(canvas *rosaline.DrawingCanvas) {
-		drawPreview(canvas, studio.project, layoutPreview(studio.project), studio.selectedID, studio.previewPicture)
+		form := studio.activeForm()
+		drawPreview(canvas, form, layoutPreview(form), studio.selectedID, studio.previewPicture)
 	}).Size(previewWidth, previewHeight).Focus()
 	studio.canvas.OnMouseDown(func(event rosaline.MouseEvent) {
 		if event.Button != rosaline.MouseLeft && event.Button != rosaline.MouseRight {
 			return
 		}
-		if node := previewBoxAt(layoutPreview(studio.project), event.X, event.Y); node != nil {
+		if node := previewBoxAt(layoutPreview(studio.activeForm()), event.X, event.Y); node != nil {
 			if event.Button == rosaline.MouseLeft {
 				studio.dragID = node.ID
 			}
@@ -140,7 +157,7 @@ func (studio *studio) run() {
 		}
 		dragged := studio.dragID
 		studio.dragID = ""
-		target := previewBoxAt(layoutPreview(studio.project), event.X, event.Y)
+		target := previewBoxAt(layoutPreview(studio.activeForm()), event.X, event.Y)
 		if target == nil || target.ID == dragged {
 			return
 		}
@@ -153,7 +170,7 @@ func (studio *studio) run() {
 	})
 	studio.canvas.OnDoubleClick(func(event rosaline.MouseEvent) {
 		studio.dragID = ""
-		node := previewBoxAt(layoutPreview(studio.project), event.X, event.Y)
+		node := previewBoxAt(layoutPreview(studio.activeForm()), event.X, event.Y)
 		if node == nil {
 			return
 		}
@@ -236,6 +253,7 @@ func (studio *studio) run() {
 		rosaline.Error("Could not run generated application", message)
 	})
 
+	studio.rebuildForms()
 	studio.rebuildTree()
 
 	menu := rosaline.MenuBar(
@@ -263,6 +281,11 @@ func (studio *studio) run() {
 			rosaline.MenuItem("Move Up", func() { studio.moveSelected(-1) }).Shortcut("Alt+Up"),
 			rosaline.MenuItem("Move Down", func() { studio.moveSelected(1) }).Shortcut("Alt+Down"),
 			rosaline.MenuItem("Delete Selected Widget", studio.deleteSelected),
+		),
+		rosaline.Menu("Project",
+			rosaline.MenuItem("New Form", studio.addForm),
+			rosaline.MenuItem("Duplicate Form", studio.duplicateForm),
+			rosaline.MenuItem("Delete Form", studio.deleteForm),
 		),
 		rosaline.Menu("Help",
 			rosaline.MenuItem("Quick Help", studio.showHelp).Shortcut("F1"),
@@ -317,6 +340,29 @@ func generatedCommandEnvironment() []string {
 	return append(environment, "CGO_ENABLED=0", "GOWORK=off")
 }
 
+func (studio *studio) activeForm() *designForm {
+	if studio == nil || studio.project == nil {
+		return nil
+	}
+	if form := studio.project.form(studio.formID); form != nil {
+		return form
+	}
+	return studio.project.mainForm()
+}
+
+func (studio *studio) selectForm(id string) {
+	form := studio.project.form(id)
+	if form == nil || !studio.confirmOpenHandler("") {
+		return
+	}
+	studio.formID = form.ID
+	studio.selectedID = form.Root.ID
+	studio.loadProjectInspector()
+	studio.refreshDesign()
+	studio.status = "Editing " + form.Name
+	studio.syncFormSelection()
+}
+
 func (studio *studio) rememberRunOutput(output string) {
 	studio.runMu.Lock()
 	studio.runOutput = tailOutput(output, 2400)
@@ -325,6 +371,14 @@ func (studio *studio) rememberRunOutput(output string) {
 
 func (studio *studio) buildPalettePanel() rosaline.Widget {
 	return rosaline.Column(
+		rosaline.Label("Project Forms").Bold().Color(rosaline.Rose),
+		studio.formList,
+		rosaline.Row(
+			rosaline.Button("New", studio.addForm),
+			rosaline.Button("Duplicate", studio.duplicateForm),
+			rosaline.Button("Delete", studio.deleteForm),
+		).Gap(5),
+		rosaline.Separator(),
 		rosaline.Label("Widget Palette").Bold().Color(rosaline.Rose),
 		rosaline.Label("Double-click or select and Add").Color(rosaline.DefaultTheme.Muted),
 		studio.palette,
@@ -419,7 +473,8 @@ func (studio *studio) buildInspectorPanel() rosaline.Widget {
 	).Gap(8).Expand()
 
 	projectPanel := rosaline.Column(
-		rosaline.Label("Application Settings").Bold(),
+		rosaline.LabelFunc(studio.formSettingsLabel).Bold(),
+		inspectorField("Form name", rosaline.TextBox(&studio.settings.Name).Width(24)),
 		inspectorField("Window title", rosaline.TextBox(&studio.settings.Title).Width(24)),
 		inspectorField("Go module path", rosaline.TextBox(&studio.settings.Module).Width(24)),
 		rosaline.Grid(2,
@@ -429,7 +484,7 @@ func (studio *studio) buildInspectorPanel() rosaline.Widget {
 		).Gap(8),
 		rosaline.Label("Theme"),
 		compactInspectorWidget(rosaline.ComboBox(&studio.settings.Theme, "Rosaline", "Lavender", "Midnight").Width(22)),
-		compactInspectorWidget(rosaline.Button("Apply Application Settings", studio.applyProjectInspector).Primary()),
+		compactInspectorWidget(rosaline.Button("Apply Form Settings", studio.applyProjectInspector).Primary()),
 		rosaline.Separator(),
 		rosaline.Label("Generated-file safety").Bold(),
 		rosaline.Label("Studio regenerates only:"),
@@ -438,7 +493,7 @@ func (studio *studio) buildInspectorPanel() rosaline.Widget {
 	).Gap(8)
 
 	eventPanel := rosaline.Column(
-		rosaline.LabelFunc(func() string { return previewDescription(studio.project.find(studio.selectedID)) }).Bold(),
+		rosaline.LabelFunc(studio.selectedWidgetLabel).Bold(),
 		rosaline.Label("Available events").Color(rosaline.DefaultTheme.Muted),
 		studio.eventList,
 		rosaline.LabelFunc(studio.selectedEventDescription).Color(rosaline.DefaultTheme.Muted),
@@ -453,7 +508,7 @@ func (studio *studio) buildInspectorPanel() rosaline.Widget {
 	return rosaline.Tabs(
 		rosaline.Tab("Properties", widgetPanel),
 		rosaline.Tab("Events", eventPanel),
-		rosaline.Tab("Application", projectPanel),
+		rosaline.Tab("Form", projectPanel),
 	).Expand()
 }
 
@@ -469,7 +524,8 @@ func compactInspectorWidget(widget rosaline.Widget) rosaline.Widget {
 }
 
 func (studio *studio) selectNode(id string) {
-	if studio.project.find(id) == nil {
+	form := studio.activeForm()
+	if form == nil || findNode(form.Root, id) == nil {
 		return
 	}
 	studio.selectedID = id
@@ -483,23 +539,26 @@ func (studio *studio) selectNode(id string) {
 
 func (studio *studio) loadEvents() {
 	node := studio.project.find(studio.selectedID)
+	form := studio.activeForm()
 	studio.availableEvents = nil
 	studio.selectedEvent = -1
 	studio.eventHandler = ""
-	if node != nil {
+	if form != nil && form.Root != nil && studio.selectedID == form.Root.ID {
+		studio.availableEvents = formEventSpecs()
+	} else if node != nil {
 		studio.availableEvents = eventSpecsFor(node.Kind)
 	}
 	items := make([]string, 0, len(studio.availableEvents))
 	for _, event := range studio.availableEvents {
 		label := event.Name
-		if handler := eventHandler(node, event.Name); handler != "" {
+		if handler := studio.selectedEventHandler(event.Name); handler != "" {
 			label += "  -  " + handler
 		}
 		items = append(items, label)
 	}
 	if len(studio.availableEvents) != 0 {
 		studio.selectedEvent = 0
-		studio.eventHandler = eventHandler(node, studio.availableEvents[0].Name)
+		studio.eventHandler = studio.selectedEventHandler(studio.availableEvents[0].Name)
 	}
 	if studio.eventList != nil {
 		studio.eventList.SetItems(items...)
@@ -516,8 +575,41 @@ func (studio *studio) selectEvent(index int) {
 		return
 	}
 	studio.selectedEvent = index
-	node := studio.project.find(studio.selectedID)
-	studio.eventHandler = eventHandler(node, studio.availableEvents[index].Name)
+	studio.eventHandler = studio.selectedEventHandler(studio.availableEvents[index].Name)
+}
+
+func (studio *studio) selectedIsForm() bool {
+	form := studio.activeForm()
+	return form != nil && form.Root != nil && studio.selectedID == form.Root.ID
+}
+
+func (studio *studio) selectedEventHandler(event string) string {
+	if studio.selectedIsForm() {
+		return formEventHandler(studio.activeForm(), event)
+	}
+	return eventHandler(studio.project.find(studio.selectedID), event)
+}
+
+func (studio *studio) setSelectedEventHandler(event, handler string) {
+	if studio.selectedIsForm() {
+		setFormEventHandler(studio.activeForm(), event, handler)
+		return
+	}
+	setEventHandler(studio.project.find(studio.selectedID), event, handler)
+}
+
+func (studio *studio) defaultSelectedHandlerName(event string) string {
+	if studio.selectedIsForm() {
+		return defaultFormHandlerName(studio.activeForm(), event)
+	}
+	return defaultHandlerName(studio.project.find(studio.selectedID), event)
+}
+
+func (studio *studio) defaultSelectedHandlerBody(event string) string {
+	if studio.selectedIsForm() {
+		return defaultFormHandlerBody(studio.activeForm(), event)
+	}
+	return defaultHandlerBody(studio.project.find(studio.selectedID), event)
 }
 
 func (studio *studio) selectedEventDescription() string {
@@ -533,7 +625,7 @@ func (studio *studio) editDefaultEvent() {
 		return
 	}
 	studio.selectedEvent = 0
-	studio.eventHandler = eventHandler(studio.project.find(studio.selectedID), studio.availableEvents[0].Name)
+	studio.eventHandler = studio.selectedEventHandler(studio.availableEvents[0].Name)
 	if studio.eventList != nil {
 		studio.eventList.Select(0)
 	}
@@ -546,13 +638,15 @@ func (studio *studio) editSelectedEvent() {
 		return
 	}
 	node := studio.project.find(studio.selectedID)
-	if node == nil {
+	form := studio.activeForm()
+	if node == nil || form == nil {
 		return
 	}
-	event := studio.availableEvents[studio.selectedEvent].Name
+	spec := studio.availableEvents[studio.selectedEvent]
+	event := spec.Name
 	handler := strings.TrimSpace(studio.eventHandler)
 	if handler == "" {
-		handler = defaultHandlerName(node, event)
+		handler = studio.defaultSelectedHandlerName(event)
 	}
 	if !validHandlerName(handler) {
 		studio.status = "Handler names must be valid Go identifiers"
@@ -561,27 +655,39 @@ func (studio *studio) editSelectedEvent() {
 	if !studio.confirmOpenHandler(handler) {
 		return
 	}
-	if handler == studio.codeHandler && eventHandler(node, event) == handler && studio.codeEditor.Modified() {
-		if studio.workspace != nil {
-			studio.workspace.Select(1)
-		}
-		studio.codeEditor.Focus()
+	if handler == studio.codeHandler && studio.codeEditor.Modified() && !studio.saveOpenHandler() {
 		return
 	}
+	signatures, err := projectHandlerSignatures(studio.project)
+	if err != nil {
+		studio.status = "Could not assign event: " + err.Error()
+		return
+	}
+	if existing := signatures[handler]; existing.Seen && existing.ReturnsBool != spec.ReturnsBool {
+		studio.status = "That handler is already used by an event with a different return type"
+		return
+	}
+	if body, exists := studio.project.Handlers[handler]; exists {
+		if err := validateHandler(handler, body, spec.ReturnsBool); err != nil {
+			studio.status = "That existing handler has an incompatible Go signature"
+			return
+		}
+	}
 	before := designSnapshot(studio.project)
-	changed := eventHandler(node, event) != handler
-	setEventHandler(node, event, handler)
+	changed := studio.selectedEventHandler(event) != handler
+	studio.setSelectedEventHandler(event, handler)
 	if studio.project.Handlers == nil {
 		studio.project.Handlers = make(map[string]string)
 	}
 	if _, exists := studio.project.Handlers[handler]; !exists {
-		studio.project.Handlers[handler] = defaultHandlerBody(node, event)
+		studio.project.Handlers[handler] = studio.defaultSelectedHandlerBody(event)
 		changed = true
 	}
 	if changed {
 		studio.commitChange(before, "Assigned "+event+" to "+handler)
 	}
 	studio.codeHandler = handler
+	studio.codeReturnsBool = spec.ReturnsBool
 	studio.codeBody = studio.project.Handlers[handler]
 	studio.eventHandler = handler
 	studio.codeEditor.SetText(studio.codeBody)
@@ -598,14 +704,13 @@ func (studio *studio) clearSelectedEvent() {
 		studio.status = "Select an event first"
 		return
 	}
-	node := studio.project.find(studio.selectedID)
 	event := studio.availableEvents[studio.selectedEvent].Name
-	if eventHandler(node, event) == "" {
+	if studio.selectedEventHandler(event) == "" {
 		studio.status = event + " is already empty"
 		return
 	}
 	before := designSnapshot(studio.project)
-	setEventHandler(node, event, "")
+	studio.setSelectedEventHandler(event, "")
 	studio.commitChange(before, "Cleared "+event)
 }
 
@@ -613,9 +718,9 @@ func (studio *studio) saveOpenHandler() bool {
 	if studio.codeHandler == "" || studio.codeEditor == nil {
 		return true
 	}
-	if err := validateHandler(studio.codeHandler, studio.codeBody); err != nil {
+	if err := validateHandler(studio.codeHandler, studio.codeBody, studio.codeReturnsBool); err != nil {
 		rosaline.Error("Invalid event code", err.Error())
-		studio.status = "Event code has a Go syntax error"
+		studio.status = "Event code is invalid for this event"
 		return false
 	}
 	if studio.project.Handlers[studio.codeHandler] != studio.codeBody {
@@ -660,7 +765,11 @@ func (studio *studio) codeHeader() string {
 	if studio.codeHandler == "" {
 		return "No event handler selected"
 	}
-	return "func (app *Application) " + studio.codeHandler + "()"
+	result := "func (app *Application) " + studio.codeHandler + "()"
+	if studio.codeReturnsBool {
+		result += " bool"
+	}
+	return result
 }
 
 func (studio *studio) chooseImage() {
@@ -729,6 +838,47 @@ func (studio *studio) previewPicture(asset string) *rosaline.Picture {
 	return picture
 }
 
+func (studio *studio) addForm() {
+	before := designSnapshot(studio.project)
+	form := studio.project.addForm()
+	studio.formID = form.ID
+	studio.selectedID = form.Root.ID
+	studio.commitChange(before, "Added "+form.Name)
+}
+
+func (studio *studio) duplicateForm() {
+	before := designSnapshot(studio.project)
+	form, err := studio.project.duplicateForm(studio.formID)
+	if err != nil {
+		studio.status = "Could not duplicate form: " + err.Error()
+		return
+	}
+	studio.formID = form.ID
+	studio.selectedID = form.Root.ID
+	studio.commitChange(before, "Duplicated form as "+form.Name)
+}
+
+func (studio *studio) deleteForm() {
+	form := studio.activeForm()
+	if form == nil || form == studio.project.mainForm() {
+		studio.status = "The main form cannot be deleted"
+		return
+	}
+	if !rosaline.Confirm("Delete form?", "Delete "+form.Name+" and all of its widgets? You can undo this change.") {
+		studio.status = "Form deletion cancelled"
+		return
+	}
+	before := designSnapshot(studio.project)
+	if err := studio.project.removeForm(form.ID); err != nil {
+		studio.status = "Could not delete form: " + err.Error()
+		return
+	}
+	main := studio.project.mainForm()
+	studio.formID = main.ID
+	studio.selectedID = main.Root.ID
+	studio.commitChange(before, "Deleted "+form.Name+" - use Primary+Z to undo")
+}
+
 func (studio *studio) addWidget(kind widgetKind) {
 	before := designSnapshot(studio.project)
 	node, err := studio.project.addNear(studio.selectedID, kind)
@@ -746,7 +896,7 @@ func (studio *studio) copySelected() {
 		studio.status = "Select a widget before copying"
 		return
 	}
-	if node == studio.project.Root {
+	if studio.project.isFormRoot(node.ID) {
 		studio.status = "The root layout cannot be copied"
 		return
 	}
@@ -756,7 +906,7 @@ func (studio *studio) copySelected() {
 
 func (studio *studio) cutSelected() {
 	node := studio.project.find(studio.selectedID)
-	if node == nil || node == studio.project.Root {
+	if node == nil || studio.project.isFormRoot(node.ID) {
 		studio.status = "Select a non-root widget before cutting"
 		return
 	}
@@ -803,7 +953,7 @@ func (studio *studio) deleteSelectedWithConfirm(confirm func(title, text string)
 		studio.status = "Select a widget before deleting"
 		return false
 	}
-	if node == studio.project.Root {
+	if studio.project.isFormRoot(node.ID) {
 		studio.status = "The root layout cannot be deleted; select one of its children"
 		return false
 	}
@@ -871,8 +1021,9 @@ func (studio *studio) selectedWidgetLabel() string {
 	if node == nil {
 		return "No widget selected"
 	}
-	if node == studio.project.Root {
-		return node.Component + " - " + string(node.Kind) + " (root layout)"
+	if studio.project.isFormRoot(node.ID) {
+		form := studio.activeForm()
+		return form.Name + " form - " + node.Component + " (root layout)"
 	}
 	label := node.Component + " - " + string(node.Kind)
 	if text := strings.TrimSpace(defaultText(node.Text, node.Name)); text != "" {
@@ -926,18 +1077,45 @@ func (studio *studio) applyInspector() {
 }
 
 func (studio *studio) applyProjectInspector() {
+	form := studio.activeForm()
+	if form == nil {
+		return
+	}
 	if strings.TrimSpace(studio.settings.Module) == "" || strings.ContainsAny(studio.settings.Module, " \t\r\n") {
 		studio.status = "The Go module path cannot be empty or contain spaces"
 		return
 	}
+	name := strings.TrimSpace(studio.settings.Name)
+	if !validComponentName(name) {
+		studio.status = "Form names must be exported Go identifiers such as SettingsForm"
+		return
+	}
+	for _, other := range studio.project.Forms {
+		if other != nil && other.ID != form.ID && other.Name == name {
+			studio.status = "Another form is already named " + name
+			return
+		}
+	}
 	before := designSnapshot(studio.project)
-	studio.project.Title = defaultText(studio.settings.Title, "My Rosaline App")
+	form.Name = name
+	form.Title = defaultText(studio.settings.Title, "My Rosaline App")
 	studio.project.Module = strings.TrimSpace(studio.settings.Module)
-	studio.project.Width = max(320, parseInteger(studio.settings.Width, studio.project.Width))
-	studio.project.Height = max(240, parseInteger(studio.settings.Height, studio.project.Height))
-	studio.project.Padding = max(0, parseInteger(studio.settings.Padding, studio.project.Padding))
-	studio.project.Theme = studio.settings.Theme
-	studio.commitChange(before, "Updated application settings")
+	form.Width = max(320, parseInteger(studio.settings.Width, form.Width))
+	form.Height = max(240, parseInteger(studio.settings.Height, form.Height))
+	form.Padding = max(0, parseInteger(studio.settings.Padding, form.Padding))
+	form.Theme = studio.settings.Theme
+	studio.commitChange(before, "Updated "+form.Name+" settings")
+}
+
+func (studio *studio) formSettingsLabel() string {
+	form := studio.activeForm()
+	if form == nil {
+		return "Form Settings"
+	}
+	if form == studio.project.mainForm() {
+		return "Main Form Settings"
+	}
+	return "Secondary Form Settings"
 }
 
 func (studio *studio) commitChange(before []byte, message string) {
@@ -999,6 +1177,8 @@ func (studio *studio) refreshDesign() {
 	studio.ensureSelection()
 	studio.loadInspector()
 	studio.loadEvents()
+	studio.loadProjectInspector()
+	studio.rebuildForms()
 	studio.rebuildTree()
 	if studio.canvas != nil {
 		studio.canvas.Redraw()
@@ -1007,13 +1187,19 @@ func (studio *studio) refreshDesign() {
 }
 
 func (studio *studio) ensureSelection() {
-	if studio.project.find(studio.selectedID) == nil {
-		studio.selectedID = studio.project.Root.ID
+	form := studio.activeForm()
+	if form == nil {
+		return
+	}
+	studio.formID = form.ID
+	if findNode(form.Root, studio.selectedID) == nil {
+		studio.selectedID = form.Root.ID
 	}
 }
 
 func (studio *studio) rebuildTree() {
-	if studio.tree == nil || studio.project == nil || studio.project.Root == nil {
+	form := studio.activeForm()
+	if studio.tree == nil || form == nil || form.Root == nil {
 		return
 	}
 	studio.treeByID = make(map[string]*rosaline.TreeNode)
@@ -1030,9 +1216,52 @@ func (studio *studio) rebuildTree() {
 		return result
 	}
 	studio.syncTree = true
-	studio.tree.SetNodes(build(studio.project.Root))
+	studio.tree.SetNodes(build(form.Root))
 	studio.tree.Select(studio.treeByID[studio.selectedID])
 	studio.syncTree = false
+}
+
+func (studio *studio) rebuildForms() {
+	if studio.formList == nil || studio.project == nil {
+		return
+	}
+	items := make([]string, 0, len(studio.project.Forms))
+	studio.formIDs = make([]string, 0, len(studio.project.Forms))
+	selected := 0
+	for index, form := range studio.project.Forms {
+		if form == nil {
+			continue
+		}
+		label := form.Name
+		if index == 0 {
+			label += " (main)"
+		}
+		items = append(items, label)
+		studio.formIDs = append(studio.formIDs, form.ID)
+		if form.ID == studio.formID {
+			selected = len(items) - 1
+		}
+	}
+	studio.syncForm = true
+	studio.formList.SetItems(items...)
+	if len(items) != 0 {
+		studio.formList.Select(selected)
+	}
+	studio.syncForm = false
+}
+
+func (studio *studio) syncFormSelection() {
+	if studio.formList == nil {
+		return
+	}
+	for index, id := range studio.formIDs {
+		if id == studio.formID {
+			studio.syncForm = true
+			studio.formList.Select(index)
+			studio.syncForm = false
+			return
+		}
+	}
 }
 
 func (studio *studio) syncTreeSelection() {
@@ -1062,10 +1291,15 @@ func (studio *studio) loadInspector() {
 }
 
 func (studio *studio) loadProjectInspector() {
+	form := studio.activeForm()
+	if form == nil {
+		studio.settings = projectInspectorState{}
+		return
+	}
 	studio.settings = projectInspectorState{
-		Title: studio.project.Title, Module: studio.project.Module,
-		Width: strconv.Itoa(studio.project.Width), Height: strconv.Itoa(studio.project.Height),
-		Padding: strconv.Itoa(studio.project.Padding), Theme: studio.project.Theme,
+		Name: form.Name, Title: form.Title, Module: studio.project.Module,
+		Width: strconv.Itoa(form.Width), Height: strconv.Itoa(form.Height),
+		Padding: strconv.Itoa(form.Padding), Theme: form.Theme,
 	}
 }
 
@@ -1075,11 +1309,14 @@ func (studio *studio) newDesign() {
 	}
 	studio.project = newProject()
 	studio.path = ""
-	studio.selectedID = studio.project.Root.ID
+	main := studio.project.mainForm()
+	studio.formID = main.ID
+	studio.selectedID = main.Root.ID
 	studio.undo, studio.redo = nil, nil
 	studio.clipboard = nil
 	studio.dirty = false
 	studio.codeHandler, studio.codeBody = "", ""
+	studio.codeReturnsBool = false
 	studio.previewPictures = make(map[string]*rosaline.Picture)
 	if studio.codeEditor != nil {
 		studio.codeEditor.SetText("")
@@ -1111,11 +1348,14 @@ func (studio *studio) openDesign() {
 	}
 	studio.project = project
 	studio.path = path
-	studio.selectedID = project.Root.ID
+	main := project.mainForm()
+	studio.formID = main.ID
+	studio.selectedID = main.Root.ID
 	studio.undo, studio.redo = nil, nil
 	studio.clipboard = nil
 	studio.dirty = false
 	studio.codeHandler, studio.codeBody = "", ""
+	studio.codeReturnsBool = false
 	studio.previewPictures = make(map[string]*rosaline.Picture)
 	if studio.codeEditor != nil {
 		studio.codeEditor.SetText("")
@@ -1256,7 +1496,7 @@ func (studio *studio) documentName() string {
 func (studio *studio) showHelp() {
 	rosaline.Message(
 		"Rosaline Studio Quick Help",
-		"1. Select a container in the hierarchy.\n2. Double-click a palette item to add it.\n3. Give controls memorable component names in Properties.\n4. Right-click to cut, copy, paste, duplicate, or delete widgets.\n5. Use Events to assign a handler, or double-click a form control.\n6. Write the handler body in Code; app.Widgets().Name controls another component.\n7. Add Image controls and choose picture files in Properties.\n8. Press F5 to generate and run.\n\nStudio never overwrites handlers.go, main.go, go.mod, or README.md.",
+		"1. Select or create a form in Project Forms.\n2. Select a container and double-click a palette item to add it.\n3. Give controls memorable component names in Properties.\n4. Right-click to cut, copy, paste, duplicate, or delete widgets.\n5. Use Events to assign a handler, or double-click a form control.\n6. Select a form's root layout to edit OnOpen, OnCloseRequest, and OnClose.\n7. Write event code with app.Widgets().Name and app.Windows().FormName.\n8. Press F5 to generate and run.\n\nStudio never overwrites handlers.go, main.go, go.mod, or README.md.",
 	)
 	studio.canvas.Focus()
 }
@@ -1264,7 +1504,7 @@ func (studio *studio) showHelp() {
 func (studio *studio) showAbout() {
 	rosaline.Message(
 		"About Rosaline Studio",
-		"Rosaline Studio v0.2.0\n\nA pure-Go Lazarus-style RAD environment built with Rosaline.\n\nGenerated code remains normal, readable Rosaline Go.",
+		"Rosaline Studio v0.4.0\n\nA pure-Go Lazarus-style RAD environment built with Rosaline.\n\nGenerated code remains normal, readable Rosaline Go.",
 	)
 	studio.canvas.Focus()
 }

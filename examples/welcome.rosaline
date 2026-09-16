@@ -1,91 +1,97 @@
 {
-  "version": 2,
+  "version": 3,
   "module": "example.com/welcome",
-  "title": "Welcome",
-  "width": 760,
-  "height": 540,
-  "padding": 16,
-  "theme": "Lavender",
-  "handlers": {
-    "ContinueClick": "rosaline.Message(\"Welcome\", \"Your Rosaline event handler is working.\")"
-  },
-  "root": {
-    "id": "root",
-    "kind": "Column",
-    "component": "MainLayout",
-    "children": [
-      {
-        "id": "node-1",
-        "kind": "Label",
-        "component": "WelcomeLabel",
-        "text": "Welcome to Rosaline",
-        "bold": true
-      },
-      {
-        "id": "node-2",
-        "kind": "Card",
-        "component": "WelcomeCard",
+  "forms": [
+    {
+      "id": "form-1",
+      "name": "MainForm",
+      "title": "Welcome",
+      "width": 760,
+      "height": 540,
+      "padding": 16,
+      "theme": "Lavender",
+      "root": {
+        "id": "root",
+        "kind": "Column",
+        "component": "MainLayout",
         "children": [
           {
-            "id": "node-3",
-            "kind": "Column",
-            "component": "WelcomeLayout",
+            "id": "node-1",
+            "kind": "Label",
+            "component": "WelcomeLabel",
+            "text": "Welcome to Rosaline",
+            "bold": true
+          },
+          {
+            "id": "node-2",
+            "kind": "Card",
+            "component": "WelcomeCard",
             "children": [
               {
-                "id": "node-4",
-                "kind": "Label",
-                "component": "InstructionsLabel",
-                "text": "Tell us a little about yourself"
-              },
-              {
-                "id": "node-5",
-                "kind": "TextBox",
-                "component": "NameTextBox",
-                "text": "Your name",
-                "name": "Name"
-              },
-              {
-                "id": "node-6",
-                "kind": "ComboBox",
-                "component": "ColourComboBox",
-                "name": "FavouriteColour",
-                "options": ["Rose", "Lavender", "Midnight"]
-              },
-              {
-                "id": "node-7",
-                "kind": "CheckBox",
-                "component": "RememberCheckBox",
-                "text": "Remember my choices",
-                "name": "Remember"
-              },
-              {
-                "id": "node-8",
-                "kind": "Button",
-                "component": "ContinueButton",
-                "text": "Continue",
-                "events": {
-                  "OnClick": "ContinueClick"
-                },
-                "primary": true
+                "id": "node-3",
+                "kind": "Column",
+                "component": "WelcomeLayout",
+                "children": [
+                  {
+                    "id": "node-4",
+                    "kind": "Label",
+                    "component": "InstructionsLabel",
+                    "text": "Tell us a little about yourself"
+                  },
+                  {
+                    "id": "node-5",
+                    "kind": "TextBox",
+                    "component": "NameTextBox",
+                    "text": "Your name",
+                    "name": "Name"
+                  },
+                  {
+                    "id": "node-6",
+                    "kind": "ComboBox",
+                    "component": "ColourComboBox",
+                    "name": "FavouriteColour",
+                    "options": ["Rose", "Lavender", "Midnight"]
+                  },
+                  {
+                    "id": "node-7",
+                    "kind": "CheckBox",
+                    "component": "RememberCheckBox",
+                    "text": "Remember my choices",
+                    "name": "Remember"
+                  },
+                  {
+                    "id": "node-8",
+                    "kind": "Button",
+                    "component": "ContinueButton",
+                    "text": "Continue",
+                    "events": {
+                      "OnClick": "ContinueClick"
+                    },
+                    "primary": true
+                  }
+                ],
+                "gap": 9,
+                "padding": 8,
+                "expand": true
               }
             ],
-            "gap": 9,
-            "padding": 8,
-            "expand": true
+            "padding": 16
+          },
+          {
+            "id": "node-9",
+            "kind": "ProgressBar",
+            "component": "ProgressBar",
+            "name": "Progress",
+            "maximum": 100
           }
         ],
-        "padding": 16
-      },
-      {
-        "id": "node-9",
-        "kind": "ProgressBar",
-        "component": "ProgressBar",
-        "name": "Progress",
-        "maximum": 100
+        "gap": 12,
+        "padding": 12,
+        "expand": true
       }
-    ],
-    "gap": 12,
-    "padding": 12,
-    "expand": true
+    }
+  ],
+  "handlers": {
+    "ContinueClick": "rosaline.Message(\"Welcome\", \"Your Rosaline event handler is working.\")"
   }
 }

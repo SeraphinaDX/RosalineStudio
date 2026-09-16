@@ -79,7 +79,7 @@ func projectAssets(project *designProject) []string {
 		}
 	}
 	if project != nil {
-		visit(project.Root)
+		project.visitRoots(visit)
 	}
 	result := make([]string, 0, len(seen))
 	for name := range seen {

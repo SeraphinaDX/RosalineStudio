@@ -2,6 +2,24 @@
 
 All notable Rosaline Studio changes are documented here.
 
+## v0.4.0 - 2026-09-16
+
+- Add a Lazarus-style project form list with commands to create, duplicate,
+  select, rename, configure, and delete secondary forms.
+- Give every form its own title, resolution, padding, theme, root layout, and
+  `OnOpen`, `OnCloseRequest`, and `OnClose` events.
+- Generate reusable typed window references through `app.Windows()`, allowing
+  event code such as `app.Windows().SettingsForm.Show()` and `.Close()`.
+- Generate each secondary form as a normal `rosaline.Window` owned by the main
+  form, while the first designed form remains the primary application window.
+- Advance the strict design schema to version 3 and automatically migrate
+  version-2 single-form designs into a `MainForm`.
+- Prevent cross-form widget dragging while retaining copy and paste between
+  forms with globally unique component, state, and widget identities.
+- Validate boolean close-request handlers separately from ordinary event
+  methods and provide a safe `return true` starter body.
+- Require Rosaline v0.18.0 for primary and secondary window lifecycle events.
+
 ## v0.3.0 - 2026-09-16
 
 - Give every visual widget a unique, editable component name and show those

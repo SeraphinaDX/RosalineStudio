@@ -42,22 +42,22 @@ type previewBox struct {
 	Depth int
 }
 
-func layoutPreview(project *designProject) []previewBox {
-	if project == nil || project.Root == nil {
+func layoutPreview(form *designForm) []previewBox {
+	if form == nil || form.Root == nil {
 		return nil
 	}
-	bounds := previewContentBounds(project)
+	bounds := previewContentBounds(form)
 	boxes := make([]previewBox, 0)
-	layoutPreviewNode(project.Root, bounds, 0, &boxes)
+	layoutPreviewNode(form.Root, bounds, 0, &boxes)
 	return boxes
 }
 
-func previewWindowBounds(project *designProject) previewRect {
+func previewWindowBounds(form *designForm) previewRect {
 	available := previewRect{X: 18, Y: 16, Width: previewWidth - 36, Height: previewHeight - 48}
 	width, height := 720.0, 520.0
-	if project != nil {
-		width = float64(max(320, project.Width))
-		height = float64(max(240, project.Height))
+	if form != nil {
+		width = float64(max(320, form.Width))
+		height = float64(max(240, form.Height))
 	}
 	scale := min(available.Width/width, available.Height/height)
 	width *= scale
@@ -70,8 +70,8 @@ func previewWindowBounds(project *designProject) previewRect {
 	}
 }
 
-func previewContentBounds(project *designProject) previewRect {
-	window := previewWindowBounds(project)
+func previewContentBounds(form *designForm) previewRect {
+	window := previewWindowBounds(form)
 	titleHeight := min(30.0, max(22.0, window.Height*0.065))
 	return previewRect{
 		X:      window.X + 6,
@@ -347,22 +347,22 @@ func paletteFor(theme string) previewPalette {
 	}
 }
 
-func drawPreview(canvas *rosaline.DrawingCanvas, project *designProject, boxes []previewBox, selectedID string, resolvers ...func(string) *rosaline.Picture) {
+func drawPreview(canvas *rosaline.DrawingCanvas, form *designForm, boxes []previewBox, selectedID string, resolvers ...func(string) *rosaline.Picture) {
 	outer := rosaline.Hex("#ead7e3")
 	canvas.Clear(outer)
-	if project == nil {
+	if form == nil {
 		return
 	}
-	colors := paletteFor(project.Theme)
-	window := previewWindowBounds(project)
+	colors := paletteFor(form.Theme)
+	window := previewWindowBounds(form)
 	titleHeight := min(30.0, max(22.0, window.Height*0.065))
 	canvas.FillRect(window.X, window.Y, window.Width, window.Height, colors.surface)
 	canvas.Rect(window.X, window.Y, window.Width, window.Height, 2, rosaline.Hex("#b78aa5"))
 	canvas.FillRect(window.X, window.Y, window.Width, titleHeight, colors.primary)
-	canvas.Text(project.Title, window.X+10, window.Y+6, rosaline.TextStyle{Color: rosaline.White, Size: 12})
-	resolution := fmt.Sprintf("%d x %d", project.Width, project.Height)
+	canvas.Text(form.Title, window.X+10, window.Y+6, rosaline.TextStyle{Color: rosaline.White, Size: 12})
+	resolution := fmt.Sprintf("%d x %d", form.Width, form.Height)
 	canvas.Text(resolution, window.X+window.Width-float64(len(resolution)*7)-10, window.Y+6, rosaline.TextStyle{Color: rosaline.White, Size: 11})
-	content := previewContentBounds(project)
+	content := previewContentBounds(form)
 	canvas.FillRect(content.X, content.Y, content.Width, content.Height, colors.background)
 
 	var resolve func(string) *rosaline.Picture

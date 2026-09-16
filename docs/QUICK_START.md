@@ -16,9 +16,10 @@ Continue button.
 
 ## 2. Understand the three panels
 
-- The left panel contains the widget palette and application hierarchy.
+- The left panel contains the project's forms, widget palette, and hierarchy
+  for the selected form.
 - The center switches between the visual Form and integrated Go Code views.
-- The right inspector has Properties, Events, and Application tabs.
+- The right inspector has Properties, Events, and Form tabs.
 
 Double-clicking a palette item adds it to the selected container. If a control
 is selected, Studio adds the new widget to that control's parent container.
@@ -41,7 +42,7 @@ when you need several controls in one of them.
 1. Select the heading in the preview or hierarchy.
 2. Set **Component name** to `GreetingLabel` and change **Text or
    placeholder** to `Welcome to my first app`.
-3. Choose **Apply Widget Properties**.
+3. Choose **Apply Properties**.
 4. Select the text box, name its component `NameTextBox`, and keep its state
    field name as `Name`.
 5. Select the button, name it `GreetButton`, and open the right inspector's
@@ -51,15 +52,16 @@ when you need several controls in one of them.
 Property edits take effect when you press their Apply button. This makes it
 easy to change several related values as one undoable operation.
 
-## 4. Configure the application
+## 4. Configure the main form
 
-Open the right panel's **Application** tab and set:
+Open the right panel's **Form** tab and set:
 
+- Form name: `MainForm`
 - Window title: `My Greeting App`
 - Go module path: a path you control, such as `example.com/greeting`
 - Theme: `Lavender`
 
-Choose **Apply Application Settings**.
+Choose **Apply Form Settings**.
 
 ## 5. Save the design
 
@@ -121,7 +123,28 @@ Lazarus form component by name.
 
 Run again from Studio. The generated button calls `app.GreetClick()` directly.
 
-## 8. Add a picture
+## 8. Add a second form
+
+1. Choose **New** under **Project Forms**.
+2. Open the **Form** inspector, set its name to `SettingsForm`, and choose
+   **Apply Form Settings**.
+3. Add any settings controls you want to its root layout.
+4. Return to `MainForm`, select a button, assign its `OnClick` event, and use
+   this event body:
+
+```go
+app.Windows().SettingsForm.Show()
+```
+
+Run the project and press the button. Calling `Show` again focuses the existing
+settings window instead of opening duplicates. The same generated handle also
+has `Close`, `Focus`, `SetTitle`, and `IsOpen` methods.
+
+To add form lifecycle code, select the form's root layout and open Events.
+`OnOpen` runs whenever the form opens, `OnCloseRequest` returns `true` to allow
+closing or `false` to cancel, and `OnClose` runs after it closes.
+
+## 9. Add a picture
 
 1. Select a container and add **Image** from the palette.
 2. Select the new Image control and choose **Choose Image...** in Properties.
@@ -133,7 +156,7 @@ Studio copies the picture into `greeting.assets/`. During generation it copies
 and embeds the asset in the Go application, so the compiled program can find
 the picture regardless of its working directory.
 
-## 9. Keep designing safely
+## 10. Keep designing safely
 
 You can now add widgets, rename state fields, switch themes, or completely
 rearrange the layout. On every generation:
