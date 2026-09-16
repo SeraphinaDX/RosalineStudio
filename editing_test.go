@@ -93,3 +93,30 @@ func TestRootLayoutCannotBeDeleted(t *testing.T) {
 		t.Fatalf("root deletion was not safely rejected: %q", studio.status)
 	}
 }
+
+func TestCopyPasteAndDuplicateAreUndoable(t *testing.T) {
+	studio := newStudio()
+	studio.selectedID = "node-3"
+	studio.copySelected()
+	studio.pasteClipboard()
+	pastedID := studio.selectedID
+	pasted := studio.project.find(pastedID)
+	if pasted == nil || pasted.Component == "ContinueButton" || pasted.Events[eventClick] != "ContinueClick" {
+		t.Fatalf("unexpected pasted widget: %#v", pasted)
+	}
+	studio.undoChange()
+	if studio.project.find(pastedID) != nil {
+		t.Fatal("undo did not remove the pasted widget")
+	}
+
+	studio.selectedID = "node-3"
+	studio.duplicateSelected()
+	duplicateID := studio.selectedID
+	if studio.project.find(duplicateID) == nil {
+		t.Fatal("duplicate command did not insert a widget")
+	}
+	studio.undoChange()
+	if studio.project.find(duplicateID) != nil {
+		t.Fatal("undo did not remove the duplicated widget")
+	}
+}

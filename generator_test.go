@@ -93,6 +93,40 @@ func TestGeneratorCreatesEventMethods(t *testing.T) {
 	}
 }
 
+func TestGeneratorExposesNamedComponentsToEvents(t *testing.T) {
+	project := newProject()
+	project.Root.Children[2].Component = "SaveButton"
+	project.Root.Children[0].Component = "StatusLabel"
+	project.Handlers["ContinueClick"] = `app.Widgets().StatusLabel.SetText("Saved")
+app.Widgets().SaveButton.SetEnabled(false)`
+	directory := t.TempDir()
+	if _, err := generateProject(project, directory); err != nil {
+		t.Fatal(err)
+	}
+	state, err := os.ReadFile(filepath.Join(directory, "state_generated.go"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	ui, err := os.ReadFile(filepath.Join(directory, "ui_generated.go"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	events, err := os.ReadFile(filepath.Join(directory, "events_generated.go"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(state), "StatusLabel") || !strings.Contains(string(state), "*rosaline.LabelWidget") ||
+		!strings.Contains(string(state), "SaveButton") || !strings.Contains(string(state), "*rosaline.ButtonWidget") {
+		t.Fatalf("generated component fields are incomplete:\n%s", state)
+	}
+	if !strings.Contains(string(ui), "rememberWidget(&generatedWidgets.StatusLabel") || !strings.Contains(string(ui), "func (app *Application) Widgets() *UIWidgets") {
+		t.Fatalf("generated UI does not capture component references:\n%s", ui)
+	}
+	if !strings.Contains(string(events), `app.Widgets().StatusLabel.SetText("Saved")`) || !strings.Contains(string(events), "app.Widgets().SaveButton.SetEnabled(false)") {
+		t.Fatalf("generated event cannot use components:\n%s", events)
+	}
+}
+
 func TestGeneratorCopiesAndEmbedsImageAssets(t *testing.T) {
 	parent := t.TempDir()
 	directory := filepath.Join(parent, "gallery")
@@ -226,12 +260,14 @@ func TestGeneratedStateNamesAreSafeAndUnique(t *testing.T) {
 		{ID: "a", Kind: kindTextBox, Name: "display name"},
 		{ID: "b", Kind: kindTextArea, Name: "display-name"},
 		{ID: "c", Kind: kindCheckBox, Name: "123"},
+		{ID: "d", Kind: kindTextBox, Name: "DisplayName2"},
 	}
 	context := makeGenerationContext(project)
 	want := []generatedField{
 		{Name: "DisplayName", Type: "string"},
 		{Name: "DisplayName2", Type: "string"},
 		{Name: "Value", Type: "bool"},
+		{Name: "DisplayName3", Type: "string"},
 	}
 	if len(context.fields) != len(want) {
 		t.Fatalf("want %d fields, got %d", len(want), len(context.fields))
@@ -253,7 +289,13 @@ func TestGeneratedApplicationBuilds(t *testing.T) {
 		t.Fatal(err)
 	}
 	directory := t.TempDir()
-	if _, err := generateProject(newProject(), directory); err != nil {
+	project := newProject()
+	for _, kind := range paletteKinds {
+		if _, err := project.addNear(project.Root.ID, kind); err != nil {
+			t.Fatalf("add %s: %v", kind, err)
+		}
+	}
+	if _, err := generateProject(project, directory); err != nil {
 		t.Fatal(err)
 	}
 	modPath := filepath.Join(directory, "go.mod")

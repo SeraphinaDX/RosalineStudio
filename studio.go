@@ -18,23 +18,24 @@ import (
 )
 
 type inspectorState struct {
-	Text     string
-	Name     string
-	Asset    string
-	Options  string
-	Gap      string
-	Padding  string
-	Columns  string
-	Width    string
-	Height   string
-	Minimum  string
-	Maximum  string
-	Step     string
-	Expand   bool
-	Primary  bool
-	Bold     bool
-	Password bool
-	Vertical bool
+	Component string
+	Text      string
+	Name      string
+	Asset     string
+	Options   string
+	Gap       string
+	Padding   string
+	Columns   string
+	Width     string
+	Height    string
+	Minimum   string
+	Maximum   string
+	Step      string
+	Expand    bool
+	Primary   bool
+	Bold      bool
+	Password  bool
+	Vertical  bool
 }
 
 type projectInspectorState struct {
@@ -73,8 +74,9 @@ type studio struct {
 	codeBody        string
 	previewPictures map[string]*rosaline.Picture
 
-	undo [][]byte
-	redo [][]byte
+	undo      [][]byte
+	redo      [][]byte
+	clipboard *designNode
 
 	runTask      *rosaline.Task
 	runMu        sync.Mutex
@@ -253,6 +255,11 @@ func (studio *studio) run() {
 			rosaline.MenuItem("Undo", studio.undoChange).Shortcut("Primary+Z"),
 			rosaline.MenuItem("Redo", studio.redoChange).Shortcut("Primary+Shift+Z"),
 			rosaline.MenuSeparator(),
+			rosaline.MenuItem("Cut Widget", studio.cutSelected),
+			rosaline.MenuItem("Copy Widget", studio.copySelected),
+			rosaline.MenuItem("Paste Widget", studio.pasteClipboard),
+			rosaline.MenuItem("Duplicate Widget", studio.duplicateSelected),
+			rosaline.MenuSeparator(),
 			rosaline.MenuItem("Move Up", func() { studio.moveSelected(-1) }).Shortcut("Alt+Up"),
 			rosaline.MenuItem("Move Down", func() { studio.moveSelected(1) }).Shortcut("Alt+Down"),
 			rosaline.MenuItem("Delete Selected Widget", studio.deleteSelected),
@@ -333,6 +340,7 @@ func (studio *studio) buildPalettePanel() rosaline.Widget {
 		rosaline.Row(
 			rosaline.Button("Up", func() { studio.moveSelected(-1) }),
 			rosaline.Button("Down", func() { studio.moveSelected(1) }),
+			rosaline.Button("Duplicate", studio.duplicateSelected),
 			rosaline.Button("Delete", studio.deleteSelected),
 		).Gap(5),
 	).Gap(7).Expand()
@@ -367,6 +375,7 @@ func (studio *studio) buildWorkspace() rosaline.Widget {
 
 func (studio *studio) buildInspectorPanel() rosaline.Widget {
 	contentProperties := rosaline.Column(
+		inspectorField("Component name", rosaline.TextBox(&studio.inspector.Component).Width(24)),
 		inspectorField("Text or placeholder", rosaline.TextBox(&studio.inspector.Text).Width(24)),
 		inspectorField("State field name", rosaline.TextBox(&studio.inspector.Name).Width(24)),
 		inspectorField("Image asset", rosaline.LabelFunc(func() string { return defaultText(studio.inspector.Asset, "No image selected") }).Color(rosaline.DefaultTheme.Muted)),
@@ -731,19 +740,72 @@ func (studio *studio) addWidget(kind widgetKind) {
 	studio.commitChange(before, "Added "+string(kind))
 }
 
+func (studio *studio) copySelected() {
+	node := studio.project.find(studio.selectedID)
+	if node == nil {
+		studio.status = "Select a widget before copying"
+		return
+	}
+	if node == studio.project.Root {
+		studio.status = "The root layout cannot be copied"
+		return
+	}
+	studio.clipboard = cloneDesignNode(node)
+	studio.status = "Copied " + node.Component
+}
+
+func (studio *studio) cutSelected() {
+	node := studio.project.find(studio.selectedID)
+	if node == nil || node == studio.project.Root {
+		studio.status = "Select a non-root widget before cutting"
+		return
+	}
+	copy := cloneDesignNode(node)
+	if studio.deleteSelectedWithConfirm(rosaline.Confirm) {
+		studio.clipboard = copy
+		studio.status = "Cut " + copy.Component + " - use Primary+V to paste"
+	}
+}
+
+func (studio *studio) pasteClipboard() {
+	if studio.clipboard == nil {
+		studio.status = "Copy or cut a widget before pasting"
+		return
+	}
+	before := designSnapshot(studio.project)
+	node, err := studio.project.insertCopy(studio.selectedID, studio.clipboard)
+	if err != nil {
+		studio.status = "Could not paste widget: " + err.Error()
+		return
+	}
+	studio.selectedID = node.ID
+	studio.commitChange(before, "Pasted "+node.Component)
+}
+
+func (studio *studio) duplicateSelected() {
+	before := designSnapshot(studio.project)
+	node, err := studio.project.duplicate(studio.selectedID)
+	if err != nil {
+		studio.status = "Could not duplicate widget: " + err.Error()
+		return
+	}
+	studio.selectedID = node.ID
+	studio.commitChange(before, "Duplicated as "+node.Component)
+}
+
 func (studio *studio) deleteSelected() {
 	studio.deleteSelectedWithConfirm(rosaline.Confirm)
 }
 
-func (studio *studio) deleteSelectedWithConfirm(confirm func(title, text string) bool) {
+func (studio *studio) deleteSelectedWithConfirm(confirm func(title, text string) bool) bool {
 	node := studio.project.find(studio.selectedID)
 	if node == nil {
 		studio.status = "Select a widget before deleting"
-		return
+		return false
 	}
 	if node == studio.project.Root {
 		studio.status = "The root layout cannot be deleted; select one of its children"
-		return
+		return false
 	}
 	contained := containedWidgetCount(node)
 	if contained > 0 {
@@ -754,7 +816,7 @@ func (studio *studio) deleteSelectedWithConfirm(confirm func(title, text string)
 		message += "? You can undo this change."
 		if confirm == nil || !confirm("Delete layout?", message) {
 			studio.status = "Deletion cancelled"
-			return
+			return false
 		}
 	}
 	before := designSnapshot(studio.project)
@@ -762,13 +824,27 @@ func (studio *studio) deleteSelectedWithConfirm(confirm func(title, text string)
 	deleted := string(node.Kind)
 	if err := studio.project.remove(studio.selectedID); err != nil {
 		studio.status = "Could not delete widget: " + err.Error()
-		return
+		return false
 	}
 	studio.selectedID = nextSelection
 	studio.commitChange(before, "Deleted "+deleted+" - use Primary+Z to undo")
+	return true
 }
 
 func (studio *studio) handleDesignerKey(event rosaline.KeyEvent) {
+	if event.Primary && !event.Alt {
+		switch event.Key {
+		case rosaline.Key("c"):
+			studio.copySelected()
+		case rosaline.Key("x"):
+			studio.cutSelected()
+		case rosaline.Key("v"):
+			studio.pasteClipboard()
+		case rosaline.Key("d"):
+			studio.duplicateSelected()
+		}
+		return
+	}
 	if event.Is(rosaline.KeyDelete) && !event.Control && !event.Alt && !event.Primary {
 		studio.deleteSelected()
 	}
@@ -777,6 +853,11 @@ func (studio *studio) handleDesignerKey(event rosaline.KeyEvent) {
 func (studio *studio) widgetContextEntries() []rosaline.MenuEntry {
 	return []rosaline.MenuEntry{
 		rosaline.MenuItem("Edit Default Event", studio.editDefaultEvent),
+		rosaline.MenuSeparator(),
+		rosaline.MenuItem("Cut", studio.cutSelected),
+		rosaline.MenuItem("Copy", studio.copySelected),
+		rosaline.MenuItem("Paste", studio.pasteClipboard),
+		rosaline.MenuItem("Duplicate", studio.duplicateSelected),
 		rosaline.MenuSeparator(),
 		rosaline.MenuItem("Move Up", func() { studio.moveSelected(-1) }),
 		rosaline.MenuItem("Move Down", func() { studio.moveSelected(1) }),
@@ -791,9 +872,9 @@ func (studio *studio) selectedWidgetLabel() string {
 		return "No widget selected"
 	}
 	if node == studio.project.Root {
-		return string(node.Kind) + " (root layout)"
+		return node.Component + " - " + string(node.Kind) + " (root layout)"
 	}
-	label := string(node.Kind)
+	label := node.Component + " - " + string(node.Kind)
 	if text := strings.TrimSpace(defaultText(node.Text, node.Name)); text != "" {
 		label += " - " + text
 	}
@@ -815,6 +896,16 @@ func (studio *studio) applyInspector() {
 		return
 	}
 	before := designSnapshot(studio.project)
+	component := strings.TrimSpace(studio.inspector.Component)
+	if !validComponentName(component) {
+		studio.status = "Component names must be exported Go identifiers such as SaveButton"
+		return
+	}
+	if studio.project.componentNameInUse(component, node.ID) {
+		studio.status = "Another widget is already named " + component
+		return
+	}
+	node.Component = component
 	node.Text = studio.inspector.Text
 	node.Name = studio.inspector.Name
 	node.Options = splitOptions(studio.inspector.Options)
@@ -933,11 +1024,7 @@ func (studio *studio) rebuildTree() {
 			children = append(children, build(child))
 		}
 		label := string(node.Kind)
-		if node.Text != "" && !node.Kind.container() {
-			label += " - " + defaultText(node.Text, node.Name)
-		} else if node.Name != "" {
-			label += " - " + node.Name
-		}
+		label += " - " + node.Component
 		result := rosaline.Node(label, children...).WithValue(node.ID).Expanded()
 		studio.treeByID[node.ID] = result
 		return result
@@ -964,7 +1051,7 @@ func (studio *studio) loadInspector() {
 		return
 	}
 	studio.inspector = inspectorState{
-		Text: node.Text, Name: node.Name, Asset: node.Asset,
+		Component: node.Component, Text: node.Text, Name: node.Name, Asset: node.Asset,
 		Options: strings.Join(node.Options, ", "),
 		Gap:     strconv.Itoa(node.Gap), Padding: strconv.Itoa(node.Padding),
 		Columns: strconv.Itoa(max(1, node.Columns)), Width: strconv.Itoa(node.Width), Height: strconv.Itoa(node.Height),
@@ -990,6 +1077,7 @@ func (studio *studio) newDesign() {
 	studio.path = ""
 	studio.selectedID = studio.project.Root.ID
 	studio.undo, studio.redo = nil, nil
+	studio.clipboard = nil
 	studio.dirty = false
 	studio.codeHandler, studio.codeBody = "", ""
 	studio.previewPictures = make(map[string]*rosaline.Picture)
@@ -1025,6 +1113,7 @@ func (studio *studio) openDesign() {
 	studio.path = path
 	studio.selectedID = project.Root.ID
 	studio.undo, studio.redo = nil, nil
+	studio.clipboard = nil
 	studio.dirty = false
 	studio.codeHandler, studio.codeBody = "", ""
 	studio.previewPictures = make(map[string]*rosaline.Picture)
@@ -1167,7 +1256,7 @@ func (studio *studio) documentName() string {
 func (studio *studio) showHelp() {
 	rosaline.Message(
 		"Rosaline Studio Quick Help",
-		"1. Select a container in the hierarchy.\n2. Double-click a palette item to add it.\n3. Select controls in the Form or hierarchy.\n4. Right-click or use Delete Selected to remove mistakes; Primary+Z restores them.\n5. Edit values in Properties and choose Apply.\n6. Use Events to assign a handler, or double-click a form control.\n7. Write the handler body in Code and save it.\n8. Add Image controls and choose picture files in Properties.\n9. Press F5 to generate and run.\n\nStudio never overwrites handlers.go, main.go, go.mod, or README.md.",
+		"1. Select a container in the hierarchy.\n2. Double-click a palette item to add it.\n3. Give controls memorable component names in Properties.\n4. Right-click to cut, copy, paste, duplicate, or delete widgets.\n5. Use Events to assign a handler, or double-click a form control.\n6. Write the handler body in Code; app.Widgets().Name controls another component.\n7. Add Image controls and choose picture files in Properties.\n8. Press F5 to generate and run.\n\nStudio never overwrites handlers.go, main.go, go.mod, or README.md.",
 	)
 	studio.canvas.Focus()
 }

@@ -64,7 +64,10 @@ func validateHandler(name, body string) error {
 func defaultHandlerName(node *designNode, event string) string {
 	base := "Widget"
 	if node != nil {
-		base = exportedIdentifier(defaultText(node.Name, node.Text))
+		base = exportedIdentifier(node.Component)
+		if base == "Value" {
+			base = exportedIdentifier(defaultText(node.Name, node.Text))
+		}
 		if base == "Value" {
 			base = exportedIdentifier(string(node.Kind))
 		}
@@ -82,7 +85,7 @@ func defaultHandlerBody(node *designNode, event string) string {
 		return fmt.Sprintf("rosaline.Message(%q, %q)", "Event", label+" clicked.")
 	}
 	if node != nil && node.Name != "" {
-		return fmt.Sprintf("// app.State.%s already contains the new value.\n// Add your response here.", exportedIdentifier(node.Name))
+		return fmt.Sprintf("// app.State.%s already contains the new value.\n// Use app.Widgets().%s to update this control.\n// Add your response here.", exportedIdentifier(node.Name), node.Component)
 	}
 	return "// Add your event code here."
 }

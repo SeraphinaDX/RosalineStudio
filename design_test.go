@@ -50,6 +50,75 @@ func TestAddMoveAndRemoveNodes(t *testing.T) {
 	}
 }
 
+func TestAddedComponentsReceiveUniqueNames(t *testing.T) {
+	project := newProject()
+	first, err := project.addNear(project.Root.ID, kindButton)
+	if err != nil {
+		t.Fatal(err)
+	}
+	second, err := project.addNear(project.Root.ID, kindButton)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if first.Component == second.Component || !validComponentName(first.Component) || !validComponentName(second.Component) {
+		t.Fatalf("component names are not safe and unique: %q, %q", first.Component, second.Component)
+	}
+}
+
+func TestDuplicateCopiesSubtreeWithIndependentIdentity(t *testing.T) {
+	project := newProject()
+	layout, err := project.addNear(project.Root.ID, kindColumn)
+	if err != nil {
+		t.Fatal(err)
+	}
+	input, err := project.addNear(layout.ID, kindTextBox)
+	if err != nil {
+		t.Fatal(err)
+	}
+	input.Events = map[string]string{eventSubmit: "SubmitText"}
+	project.Handlers["SubmitText"] = "// Submitted."
+
+	duplicate, err := project.duplicate(layout.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if duplicate.ID == layout.ID || duplicate.Component == layout.Component {
+		t.Fatalf("duplicate retained layout identity: %#v", duplicate)
+	}
+	if len(duplicate.Children) != 1 {
+		t.Fatalf("duplicate lost its child: %#v", duplicate)
+	}
+	child := duplicate.Children[0]
+	if child.ID == input.ID || child.Component == input.Component || child.Name == input.Name {
+		t.Fatalf("duplicate child identity was not made unique: %#v", child)
+	}
+	if child.Events[eventSubmit] != "SubmitText" {
+		t.Fatal("duplicate should retain its event-handler assignment")
+	}
+	child.Text = "Changed copy"
+	if input.Text == child.Text {
+		t.Fatal("editing the duplicate changed the original")
+	}
+	if err := project.validate(); err != nil {
+		t.Fatalf("duplicated design is invalid: %v", err)
+	}
+}
+
+func TestVersionTwoDesignWithoutComponentsIsUpgraded(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "old-v2.rosaline")
+	data := []byte(`{"version":2,"module":"example.com/old","title":"Old","width":720,"height":520,"padding":16,"theme":"Rosaline","root":{"id":"root","kind":"Column","children":[{"id":"node-1","kind":"Button","text":"Save"}]}}`)
+	if err := os.WriteFile(path, data, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	project, err := loadDesign(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !validComponentName(project.Root.Component) || !validComponentName(project.Root.Children[0].Component) {
+		t.Fatalf("old design did not receive component names: %#v", project.Root)
+	}
+}
+
 func TestMoveRejectsCycles(t *testing.T) {
 	project := newProject()
 	row, err := project.addNear(project.Root.ID, kindRow)

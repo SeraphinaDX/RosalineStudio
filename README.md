@@ -10,13 +10,15 @@ Rosaline Studio is itself a pure-Go Rosaline application. It builds with
 
 ![Screenshot](rosaline-studio.avif)
 
-## What v0.2.1 can do
+## What v0.3.0 can do
 
 - Add controls and layouts from a compact widget palette
 - Select widgets from the hierarchy or the visual preview
 - Drag widgets onto a container or sibling to rearrange the design
 - Delete widgets from the form toolbar, hierarchy, Edit menu, keyboard, or a
   right-click menu, with safe confirmation and undo
+- Cut, copy, paste, and duplicate complete widget subtrees
+- Give every control a Lazarus-style component name
 - Switch between Lazarus-style Form and Code views
 - Edit text, state names, sizing, spacing, and common options
 - Assign `OnClick`, `OnChange`, and `OnSubmit` methods in the Events inspector
@@ -44,10 +46,10 @@ before creating files or downloading modules.
 ## Requirements
 
 - Go 1.25 or newer
-- Rosaline v0.16.1 or newer
+- Rosaline v0.17.0 or newer
 - A graphical desktop supported by Rosaline
 
-Rosaline v0.16.1 must exist as a Git tag before a fresh clone can download the
+Rosaline v0.17.0 must exist as a Git tag before a fresh clone can download the
 dependency. If you keep both repositories side by side during development, a
 Go workspace can use your local Rosaline checkout instead.
 
@@ -100,6 +102,19 @@ func (app *Application) SaveClick() {
 }
 ```
 
+Every designed widget also has a typed component reference. A handler can
+change another control without editing generated layout code:
+
+```go
+func (app *Application) SaveButtonClick() {
+	app.Widgets().StatusLabel.SetText("Saved")
+	app.Widgets().SaveButton.SetEnabled(false)
+}
+```
+
+Choose memorable component names such as `StatusLabel` and `SaveButton` in the
+Properties inspector. Older version-2 designs receive safe names automatically.
+
 Studio stores event bodies in the `.rosaline` design and regenerates
 `events_generated.go`. Put reusable helpers, services, imports, and non-visual
 logic in developer-owned `handlers.go` or another Go file. Adding or removing a
@@ -112,7 +127,7 @@ Layouts: `Column`, `Row`, `Grid`, `Stack`, `Card`, and `Scroll`.
 Controls: `Label`, `Image`, `Button`, `TextBox`, `TextArea`, `CheckBox`,
 `ComboBox`, `Slider`, `ProgressBar`, and `Spacer`.
 
-Rosaline has more features than the v0.2 palette. Menus, dialogs, canvases,
+Rosaline has more features than the v0.3 palette. Menus, dialogs, canvases,
 timers, tables, tabs, and custom widgets can already be added by hand
 to the generated project and are candidates for later Studio releases.
 
@@ -139,7 +154,7 @@ env CGO_ENABLED=0 ROSALINE_SOURCE=../Rosaline go test ./...
 
 ## Project status
 
-Rosaline Studio v0.2.0 is an intentionally small early release. Generated code
+Rosaline Studio v0.3.0 is an intentionally small early release. Generated code
 and saved designs are designed to stay understandable while the visual tooling
 grows. The design schema is versioned, but the Studio API and file format remain
 experimental until v1.0. Version-1 design files are intentionally incompatible
