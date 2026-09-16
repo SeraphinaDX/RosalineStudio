@@ -495,9 +495,5 @@ func previewDescription(node *designNode) string {
 	if node == nil {
 		return "No widget selected"
 	}
-	name := ""
-	if node.Name != "" {
-		name = " - " + node.Name
-	}
-	return fmt.Sprintf("%s%s (%s)", node.Kind, name, node.ID)
+	return fmt.Sprintf("%s - %s", node.Component, node.Kind)
 }

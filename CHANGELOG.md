@@ -2,6 +2,20 @@
 
 All notable Rosaline Studio changes are documented here.
 
+## v0.3.0 - 2026-09-16
+
+- Give every visual widget a unique, editable component name and show those
+  names consistently in the hierarchy, form toolbar, and inspector.
+- Generate typed component references through `app.Widgets()` so event methods
+  can directly change labels, buttons, inputs, checks, images, and layouts.
+- Add Cut, Copy, Paste, and Duplicate to the Edit menu and right-click menus,
+  plus focused designer keyboard shortcuts.
+- Give pasted subtrees fresh IDs, component names, and state fields while
+  intentionally retaining their assigned event handlers.
+- Automatically add component names when opening older version-2 designs.
+- Require Rosaline v0.17.0 for runtime text, checked-state, focus, and
+  enabled-state control.
+
 ## v0.2.1 - 2026-09-15
 
 - Put a prominent **Delete Selected** command directly above the form preview

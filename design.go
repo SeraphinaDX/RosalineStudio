@@ -10,6 +10,8 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"unicode"
+	"unicode/utf8"
 )
 
 const designVersion = 2
@@ -55,27 +57,28 @@ var paletteKinds = []widgetKind{
 }
 
 type designNode struct {
-	ID       string            `json:"id"`
-	Kind     widgetKind        `json:"kind"`
-	Text     string            `json:"text,omitempty"`
-	Name     string            `json:"name,omitempty"`
-	Asset    string            `json:"asset,omitempty"`
-	Events   map[string]string `json:"events,omitempty"`
-	Options  []string          `json:"options,omitempty"`
-	Children []*designNode     `json:"children,omitempty"`
-	Gap      int               `json:"gap,omitempty"`
-	Padding  int               `json:"padding,omitempty"`
-	Columns  int               `json:"columns,omitempty"`
-	Width    int               `json:"width,omitempty"`
-	Height   int               `json:"height,omitempty"`
-	Minimum  float64           `json:"minimum,omitempty"`
-	Maximum  float64           `json:"maximum,omitempty"`
-	Step     float64           `json:"step,omitempty"`
-	Expand   bool              `json:"expand,omitempty"`
-	Primary  bool              `json:"primary,omitempty"`
-	Bold     bool              `json:"bold,omitempty"`
-	Password bool              `json:"password,omitempty"`
-	Vertical bool              `json:"vertical,omitempty"`
+	ID        string            `json:"id"`
+	Kind      widgetKind        `json:"kind"`
+	Component string            `json:"component,omitempty"`
+	Text      string            `json:"text,omitempty"`
+	Name      string            `json:"name,omitempty"`
+	Asset     string            `json:"asset,omitempty"`
+	Events    map[string]string `json:"events,omitempty"`
+	Options   []string          `json:"options,omitempty"`
+	Children  []*designNode     `json:"children,omitempty"`
+	Gap       int               `json:"gap,omitempty"`
+	Padding   int               `json:"padding,omitempty"`
+	Columns   int               `json:"columns,omitempty"`
+	Width     int               `json:"width,omitempty"`
+	Height    int               `json:"height,omitempty"`
+	Minimum   float64           `json:"minimum,omitempty"`
+	Maximum   float64           `json:"maximum,omitempty"`
+	Step      float64           `json:"step,omitempty"`
+	Expand    bool              `json:"expand,omitempty"`
+	Primary   bool              `json:"primary,omitempty"`
+	Bold      bool              `json:"bold,omitempty"`
+	Password  bool              `json:"password,omitempty"`
+	Vertical  bool              `json:"vertical,omitempty"`
 }
 
 type designProject struct {
@@ -103,15 +106,16 @@ func newProject() *designProject {
 			"ContinueClick": `rosaline.Message("Your application", "Continue clicked.")`,
 		},
 		Root: &designNode{
-			ID:      "root",
-			Kind:    kindColumn,
-			Gap:     10,
-			Padding: 12,
-			Expand:  true,
+			ID:        "root",
+			Kind:      kindColumn,
+			Component: "MainLayout",
+			Gap:       10,
+			Padding:   12,
+			Expand:    true,
 			Children: []*designNode{
-				{ID: "node-1", Kind: kindLabel, Text: "Welcome to Rosaline", Bold: true},
-				{ID: "node-2", Kind: kindTextBox, Text: "Your name", Name: "Name"},
-				{ID: "node-3", Kind: kindButton, Text: "Continue", Events: map[string]string{"OnClick": "ContinueClick"}, Primary: true},
+				{ID: "node-1", Kind: kindLabel, Component: "WelcomeLabel", Text: "Welcome to Rosaline", Bold: true},
+				{ID: "node-2", Kind: kindTextBox, Component: "NameTextBox", Text: "Your name", Name: "Name"},
+				{ID: "node-3", Kind: kindButton, Component: "ContinueButton", Text: "Continue", Events: map[string]string{"OnClick": "ContinueClick"}, Primary: true},
 			},
 		},
 	}
@@ -253,8 +257,261 @@ func (project *designProject) addNear(selectedID string, kind widgetKind) (*desi
 		return nil, fmt.Errorf("%s can contain one widget; select its parent instead", parent.Kind)
 	}
 	node := defaultNode(kind, project.nextID())
+	node.Component = project.nextComponentName(kind)
 	parent.Children = append(parent.Children, node)
 	return node, nil
+}
+
+func cloneDesignNode(node *designNode) *designNode {
+	if node == nil {
+		return nil
+	}
+	clone := *node
+	clone.Options = append([]string(nil), node.Options...)
+	clone.Children = make([]*designNode, 0, len(node.Children))
+	if node.Events != nil {
+		clone.Events = make(map[string]string, len(node.Events))
+		for event, handler := range node.Events {
+			clone.Events[event] = handler
+		}
+	}
+	for _, child := range node.Children {
+		clone.Children = append(clone.Children, cloneDesignNode(child))
+	}
+	return &clone
+}
+
+// insertCopy places an independent copy inside a selected container or just
+// after a selected control. IDs, component names, and bound state names are
+// made unique while event handler assignments remain shared intentionally.
+func (project *designProject) insertCopy(selectedID string, source *designNode) (*designNode, error) {
+	if project == nil || project.Root == nil || source == nil {
+		return nil, errors.New("there is no copied widget to paste")
+	}
+	selected := project.find(selectedID)
+	if selected == nil {
+		selected = project.Root
+	}
+	parent := selected
+	insertIndex := len(parent.Children)
+	if !selected.Kind.container() {
+		parent = project.parentOf(selected.ID)
+		if parent == nil {
+			return nil, errors.New("select a container or a child of one")
+		}
+		for index, child := range parent.Children {
+			if child != nil && child.ID == selected.ID {
+				insertIndex = index + 1
+				break
+			}
+		}
+	}
+	if (parent.Kind == kindCard || parent.Kind == kindScroll) && len(parent.Children) != 0 {
+		return nil, fmt.Errorf("%s can contain only one widget", parent.Kind)
+	}
+
+	clone := cloneDesignNode(source)
+	project.prepareCopiedSubtree(clone)
+	parent.Children = append(parent.Children, nil)
+	copy(parent.Children[insertIndex+1:], parent.Children[insertIndex:])
+	parent.Children[insertIndex] = clone
+	return clone, nil
+}
+
+func (project *designProject) duplicate(id string) (*designNode, error) {
+	node := project.find(id)
+	if node == nil {
+		return nil, errors.New("select a widget before duplicating")
+	}
+	if node == project.Root {
+		return nil, errors.New("the root layout cannot be duplicated")
+	}
+	parent := project.parentOf(id)
+	if parent == nil {
+		return nil, errors.New("widget has no parent")
+	}
+	if parent.Kind == kindCard || parent.Kind == kindScroll {
+		return nil, fmt.Errorf("%s can contain only one widget", parent.Kind)
+	}
+	insertIndex := len(parent.Children)
+	for index, child := range parent.Children {
+		if child != nil && child.ID == id {
+			insertIndex = index + 1
+			break
+		}
+	}
+	clone := cloneDesignNode(node)
+	project.prepareCopiedSubtree(clone)
+	parent.Children = append(parent.Children, nil)
+	copy(parent.Children[insertIndex+1:], parent.Children[insertIndex:])
+	parent.Children[insertIndex] = clone
+	return clone, nil
+}
+
+func (project *designProject) prepareCopiedSubtree(node *designNode) {
+	usedComponents := make(map[string]bool)
+	usedState := make(map[string]bool)
+	nextID := 1
+	var collect func(*designNode)
+	collect = func(current *designNode) {
+		if current == nil {
+			return
+		}
+		usedComponents[current.Component] = true
+		if stateType(current.Kind) != "" {
+			uniqueGeneratedName(exportedIdentifier(current.Name), usedState)
+		}
+		if strings.HasPrefix(current.ID, "node-") {
+			if value, err := strconv.Atoi(strings.TrimPrefix(current.ID, "node-")); err == nil {
+				nextID = max(nextID, value+1)
+			}
+		}
+		for _, child := range current.Children {
+			collect(child)
+		}
+	}
+	collect(project.Root)
+
+	var prepare func(*designNode)
+	prepare = func(current *designNode) {
+		if current == nil {
+			return
+		}
+		current.ID = fmt.Sprintf("node-%d", nextID)
+		nextID++
+		current.Component = uniqueCopiedName(current.Component, usedComponents)
+		if stateType(current.Kind) != "" {
+			current.Name = uniqueGeneratedName(exportedIdentifier(current.Name), usedState)
+		}
+		for _, child := range current.Children {
+			prepare(child)
+		}
+	}
+	prepare(node)
+}
+
+func uniqueCopiedName(base string, used map[string]bool) string {
+	base = exportedIdentifier(base)
+	if base == "" || base == "Value" {
+		base = "Widget"
+	}
+	return uniqueGeneratedName(base, used)
+}
+
+func uniqueGeneratedName(base string, used map[string]bool) string {
+	if !used[base] {
+		used[base] = true
+		return base
+	}
+	prefix := strings.TrimRightFunc(base, unicode.IsDigit)
+	suffix := 2
+	if prefix != base {
+		if number, err := strconv.Atoi(strings.TrimPrefix(base, prefix)); err == nil {
+			suffix = number + 1
+		}
+		base = prefix
+	}
+	for ; ; suffix++ {
+		candidate := base + strconv.Itoa(suffix)
+		if !used[candidate] {
+			used[candidate] = true
+			return candidate
+		}
+	}
+}
+
+func (project *designProject) nextComponentName(kind widgetKind) string {
+	used := make(map[string]bool)
+	var visit func(*designNode)
+	visit = func(node *designNode) {
+		if node == nil {
+			return
+		}
+		if node.Component != "" {
+			used[node.Component] = true
+		}
+		for _, child := range node.Children {
+			visit(child)
+		}
+	}
+	if project != nil {
+		visit(project.Root)
+	}
+	return nextAvailableName(exportedIdentifier(string(kind)), used)
+}
+
+func nextAvailableName(base string, used map[string]bool) string {
+	base = exportedIdentifier(base)
+	if base == "" || base == "Value" {
+		base = "Widget"
+	}
+	for suffix := 1; ; suffix++ {
+		candidate := base + strconv.Itoa(suffix)
+		if !used[candidate] {
+			used[candidate] = true
+			return candidate
+		}
+	}
+}
+
+func validComponentName(name string) bool {
+	name = strings.TrimSpace(name)
+	first, _ := utf8.DecodeRuneInString(name)
+	return validHandlerName(name) && unicode.IsUpper(first)
+}
+
+func (project *designProject) componentNameInUse(name, exceptID string) bool {
+	var found bool
+	var visit func(*designNode)
+	visit = func(node *designNode) {
+		if node == nil || found {
+			return
+		}
+		if node.ID != exceptID && node.Component == name {
+			found = true
+			return
+		}
+		for _, child := range node.Children {
+			visit(child)
+		}
+	}
+	if project != nil {
+		visit(project.Root)
+	}
+	return found
+}
+
+func (project *designProject) ensureComponentNames() {
+	if project == nil || project.Root == nil {
+		return
+	}
+	used := make(map[string]bool)
+	var collect func(*designNode)
+	collect = func(node *designNode) {
+		if node == nil {
+			return
+		}
+		if node.Component != "" {
+			used[node.Component] = true
+		}
+		for _, child := range node.Children {
+			collect(child)
+		}
+	}
+	collect(project.Root)
+	var fill func(*designNode)
+	fill = func(node *designNode) {
+		if node == nil {
+			return
+		}
+		if node.Component == "" {
+			node.Component = nextAvailableName(exportedIdentifier(string(node.Kind)), used)
+		}
+		for _, child := range node.Children {
+			fill(child)
+		}
+	}
+	fill(project.Root)
 }
 
 func (project *designProject) remove(id string) error {
@@ -397,6 +654,7 @@ func (project *designProject) validate() error {
 		return errors.New("the Go module path cannot be empty")
 	}
 	seen := make(map[string]bool)
+	components := make(map[string]bool)
 	for name, body := range project.Handlers {
 		if err := validateHandler(name, body); err != nil {
 			return err
@@ -411,6 +669,13 @@ func (project *designProject) validate() error {
 			return fmt.Errorf("widget ID %q is empty or repeated", node.ID)
 		}
 		seen[node.ID] = true
+		if !validComponentName(node.Component) {
+			return fmt.Errorf("widget %s has invalid component name %q", node.ID, node.Component)
+		}
+		if components[node.Component] {
+			return fmt.Errorf("component name %q is repeated", node.Component)
+		}
+		components[node.Component] = true
 		if !knownKind(node.Kind) {
 			return fmt.Errorf("widget %s has unknown kind %q", node.ID, node.Kind)
 		}
@@ -482,6 +747,7 @@ func loadDesign(path string) (*designProject, error) {
 	if project.Handlers == nil {
 		project.Handlers = make(map[string]string)
 	}
+	project.ensureComponentNames()
 	if err := project.validate(); err != nil {
 		return nil, err
 	}
@@ -498,6 +764,7 @@ func restoreSnapshot(data []byte) (*designProject, error) {
 	if err := json.Unmarshal(data, &project); err != nil {
 		return nil, err
 	}
+	project.ensureComponentNames()
 	if err := project.validate(); err != nil {
 		return nil, err
 	}

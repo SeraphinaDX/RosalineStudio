@@ -19,11 +19,12 @@ Rosaline Studio stores visual projects as UTF-8 JSON files ending in
 
 ## Widget fields
 
-Every widget has a unique `id` and a `kind`. Fields that do not apply to a
-widget are omitted when empty.
+Every widget has a unique internal `id`, a `kind`, and an exported Go
+`component` name. Fields that do not apply to a widget are omitted when empty.
 
 | Field | Used by | Meaning |
 |---|---|---|
+| `component` | every widget | Unique generated component-reference name |
 | `text` | labels, buttons, inputs, checks | Visible text or placeholder |
 | `name` | stateful controls | Preferred generated Go state-field name |
 | `asset` | images | Safe filename in the design's `.assets` folder |
@@ -39,6 +40,10 @@ widget are omitted when empty.
 | `bold` | labels | Use bold text |
 | `password` | text boxes | Mask entered text |
 | `vertical` | sliders/progress | Use vertical orientation |
+
+Component names are exported Go identifiers such as `SaveButton`. They are
+available to event code through `app.Widgets().SaveButton`. Studio fills in
+missing component names when opening an older version-2 design.
 
 State names are converted to exported Go identifiers. Duplicate names gain a
 numeric suffix. For example, `display name` and `display-name` become
@@ -61,22 +66,26 @@ numeric suffix. For example, `display name` and `display-name` become
   "root": {
     "id": "root",
     "kind": "Column",
+    "component": "MainLayout",
     "children": [
       {
         "id": "node-1",
         "kind": "Label",
+        "component": "QuestionLabel",
         "text": "What is your name?",
         "bold": true
       },
       {
         "id": "node-2",
         "kind": "TextBox",
+        "component": "NameTextBox",
         "text": "Your name",
         "name": "Name"
       },
       {
         "id": "node-3",
         "kind": "Button",
+        "component": "GreetButton",
         "text": "Say hello",
         "events": {
           "OnClick": "GreetClick"
@@ -93,7 +102,8 @@ numeric suffix. For example, `display name` and `display-name` become
 
 ## Compatibility and validation
 
-Studio rejects unknown JSON fields, unknown widget kinds, repeated IDs,
+Studio rejects unknown JSON fields, unknown widget kinds, repeated IDs or
+component names,
 children inside non-container controls, and more than one child in a `Card` or
 `Scroll`. It also validates event names, handler identifiers, and Go syntax.
 Strict loading catches typing mistakes rather than silently losing design data.
