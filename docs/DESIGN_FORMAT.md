@@ -1,13 +1,13 @@
 # Rosaline design format
 
 Rosaline Studio stores visual projects as UTF-8 JSON files ending in
-`.rosaline`. The current schema version is `3`.
+`.rosaline`. The current schema version is `4`.
 
 ## Project fields
 
 | Field | Type | Meaning |
 |---|---|---|
-| `version` | integer | Design schema version; currently `3` |
+| `version` | integer | Design schema version; currently `4` |
 | `module` | string | Generated Go module path |
 | `forms` | form array | Primary form first, followed by reusable secondary forms |
 | `handlers` | object | Go event bodies keyed by handler method name |
@@ -28,10 +28,26 @@ by the primary form.
 | `theme` | string | `Rosaline`, `Lavender`, or `Midnight` |
 | `root` | widget | Root layout for this form |
 | `events` | object | `OnOpen`, `OnCloseRequest`, or `OnClose` handler methods |
+| `menus` | menu array | Top-level menus for this form's native menu bar |
 
 `OnCloseRequest` is the one boolean event. Its handler must return `true` to
 allow the close or `false` to keep the form open. Other form and widget event
 handlers do not return a value.
+
+## Menu fields
+
+Every menu entry has a globally unique `id` and a `kind` of `Menu`, `Item`, or
+`Separator`. Only `Menu` entries may appear at the top level.
+
+| Field | Used by | Meaning |
+|---|---|---|
+| `text` | menus and items | Visible caption |
+| `children` | menus | Nested items, submenus, and separators |
+| `handler` | items | Named no-result click method |
+| `shortcut` | items | Rosaline shortcut such as `Primary+S` or `F5` |
+
+Separators have no other fields. Menus cannot have handlers or shortcuts, and
+items cannot contain children.
 
 ## Widget fields
 
@@ -69,7 +85,7 @@ numeric suffix. For example, `display name` and `display-name` become
 
 ```json
 {
-  "version": 3,
+  "version": 4,
   "module": "example.com/greeting",
   "forms": [
     {
@@ -96,7 +112,23 @@ numeric suffix. For example, `display name` and `display-name` become
         "gap": 10,
         "padding": 12,
         "expand": true
-      }
+      },
+      "menus": [
+        {
+          "id": "menu-1",
+          "kind": "Menu",
+          "text": "File",
+          "children": [
+            {
+              "id": "menu-2",
+              "kind": "Item",
+              "text": "Settings",
+              "handler": "ShowSettings",
+              "shortcut": "Primary+,"
+            }
+          ]
+        }
+      ]
     },
     {
       "id": "form-2",
@@ -132,8 +164,9 @@ controls, and more than one child in a `Card` or `Scroll`. It validates event
 names, handler identifiers, handler return shape, and Go syntax. Widget moves
 stay within a form, while copy and paste can safely cross forms.
 
-Studio automatically migrates a version-2 single-form design to version 3 as
-a `MainForm`; save the file to keep the upgraded structure. Version-1 designs
-used a generic string action dispatcher and remain intentionally incompatible.
+Studio automatically migrates version-2 single-form and version-3 multi-form
+designs to version 4; save the file to keep the upgraded structure. Version-1
+designs used a generic string action dispatcher and remain intentionally
+incompatible.
 Commit important design files to Git before opening them in a newer Studio
 version.

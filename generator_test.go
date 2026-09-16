@@ -93,6 +93,46 @@ func TestGeneratorCreatesEventMethods(t *testing.T) {
 	}
 }
 
+func TestGeneratorCreatesNestedMenusAndClickHandlers(t *testing.T) {
+	project := newProject()
+	project.mainForm().Menus = []*designMenu{{
+		ID: "menu-1", Kind: menuKindMenu, Text: "File",
+		Children: []*designMenu{
+			{ID: "menu-2", Kind: menuKindItem, Text: "Save", Handler: "SaveClick", Shortcut: "Primary+S"},
+			{ID: "menu-3", Kind: menuKindSeparator},
+			{ID: "menu-4", Kind: menuKindMenu, Text: "Recent", Children: []*designMenu{
+				{ID: "menu-5", Kind: menuKindItem, Text: "Notes", Handler: "OpenNotes"},
+			}},
+		},
+	}}
+	project.Handlers["SaveClick"] = "// Save."
+	project.Handlers["OpenNotes"] = "// Open notes."
+	directory := t.TempDir()
+	if _, err := generateProject(project, directory); err != nil {
+		t.Fatal(err)
+	}
+	ui, err := os.ReadFile(filepath.Join(directory, "ui_generated.go"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	events, err := os.ReadFile(filepath.Join(directory, "events_generated.go"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{
+		`Menu:    buildMainFormMenu(app)`,
+		`rosaline.Menu("Recent"`,
+		`rosaline.MenuItem("Save", func() { app.SaveClick() }).Shortcut("Primary+S")`,
+	} {
+		if !strings.Contains(string(ui), want) {
+			t.Fatalf("generated UI is missing %q:\n%s", want, ui)
+		}
+	}
+	if !strings.Contains(string(events), "func (app *Application) SaveClick()") || !strings.Contains(string(events), "func (app *Application) OpenNotes()") {
+		t.Fatalf("generated menu handlers are incomplete:\n%s", events)
+	}
+}
+
 func TestGeneratorCreatesMultipleFormsAndLifecycleEvents(t *testing.T) {
 	project := newProject()
 	main := project.mainForm()
@@ -359,6 +399,17 @@ func TestGeneratedApplicationBuilds(t *testing.T) {
 	project.Handlers["SettingsOpen"] = "// Opened."
 	project.Handlers["AllowSettingsClose"] = "return true"
 	project.Handlers["SettingsClose"] = "// Closed."
+	project.mainForm().Menus = []*designMenu{{
+		ID: "menu-1", Kind: menuKindMenu, Text: "File", Children: []*designMenu{
+			{ID: "menu-2", Kind: menuKindItem, Text: "Run", Handler: "RunClick", Shortcut: "F5"},
+			{ID: "menu-3", Kind: menuKindMenu, Text: "Recent", Children: []*designMenu{
+				{ID: "menu-4", Kind: menuKindItem, Text: "Example", Handler: "RecentClick"},
+			}},
+		},
+	}}
+	secondary.Menus = []*designMenu{{ID: "menu-5", Kind: menuKindMenu, Text: "Help"}}
+	project.Handlers["RunClick"] = "// Run."
+	project.Handlers["RecentClick"] = "// Recent."
 	for _, kind := range paletteKinds {
 		if _, err := project.addNear(project.mainForm().Root.ID, kind); err != nil {
 			t.Fatalf("add %s: %v", kind, err)

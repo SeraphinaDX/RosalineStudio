@@ -18,8 +18,9 @@ Continue button.
 
 - The left panel contains the project's forms, widget palette, and hierarchy
   for the selected form.
-- The center switches between the visual Form and integrated Go Code views.
-- The right inspector has Properties, Events, and Form tabs.
+- The center switches between the visual Form, Menus, and integrated Go Code
+  views.
+- The right inspector has Properties, Events, Menu, and Form tabs.
 
 Double-clicking a palette item adds it to the selected container. If a control
 is selected, Studio adds the new widget to that control's parent container.
@@ -144,7 +145,27 @@ To add form lifecycle code, select the form's root layout and open Events.
 `OnOpen` runs whenever the form opens, `OnCloseRequest` returns `true` to allow
 closing or `false` to cancel, and `OnClose` runs after it closes.
 
-## 9. Add a picture
+## 9. Add an application menu
+
+1. Open the center **Menus** tab.
+2. Choose **Add Top Menu** and set its caption to `File` in the Menu inspector.
+3. Select File and choose **Add Item**.
+4. Set the item caption to `About`, enter `ShowAbout` as its click handler, and
+   choose **Assign and Edit Click**.
+5. Replace the starter event body with:
+
+```go
+rosaline.Message("About", "Made visually with Rosaline Studio!")
+```
+
+Use **Add Submenu** for nested choices and **Add Separator** to group related
+commands. A shortcut such as `Primary+S` or `F5` is attached to a menu item.
+The form preview shows the menu bar immediately; F5 runs the native version.
+
+Open `examples/notepad.rosaline` for a complete menu-driven application with
+File, Edit, Help, nested menu, undo, redo, cut, copy, and paste commands.
+
+## 10. Add a picture
 
 1. Select a container and add **Image** from the palette.
 2. Select the new Image control and choose **Choose Image...** in Properties.
@@ -156,7 +177,7 @@ Studio copies the picture into `greeting.assets/`. During generation it copies
 and embeds the asset in the Go application, so the compiled program can find
 the picture regardless of its working directory.
 
-## 10. Keep designing safely
+## 11. Keep designing safely
 
 You can now add widgets, rename state fields, switch themes, or completely
 rearrange the layout. On every generation:

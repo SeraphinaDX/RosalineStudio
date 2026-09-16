@@ -13,6 +13,10 @@ import (
 func TestDesignRoundTrip(t *testing.T) {
 	project := newProject()
 	project.mainForm().Title = "Round trip"
+	project.mainForm().Menus = []*designMenu{{
+		ID: "menu-1", Kind: menuKindMenu, Text: "File",
+		Children: []*designMenu{{ID: "menu-2", Kind: menuKindItem, Text: "Save", Handler: "ContinueClick", Shortcut: "Primary+S"}},
+	}}
 	path := filepath.Join(t.TempDir(), "nested", "app.rosaline")
 	if err := saveDesign(path, project); err != nil {
 		t.Fatalf("saveDesign: %v", err)
@@ -23,6 +27,37 @@ func TestDesignRoundTrip(t *testing.T) {
 	}
 	if !reflect.DeepEqual(project, loaded) {
 		t.Fatalf("loaded design differs\nwant: %#v\n got: %#v", project, loaded)
+	}
+}
+
+func TestMenuDesignerModelSupportsNestedMenus(t *testing.T) {
+	project := newProject()
+	form := project.mainForm()
+	file := project.addTopMenu(form)
+	file.Text = "File"
+	recent, err := project.addMenuChild(form, file.ID, menuKindMenu)
+	if err != nil {
+		t.Fatal(err)
+	}
+	recent.Text = "Open Recent"
+	item, err := project.addMenuChild(form, recent.ID, menuKindItem)
+	if err != nil {
+		t.Fatal(err)
+	}
+	item.Text, item.Handler, item.Shortcut = "Notes", "OpenNotes", "Primary+O"
+	project.Handlers["OpenNotes"] = "// Open the file."
+	if err := project.validate(); err != nil {
+		t.Fatalf("nested menu is invalid: %v", err)
+	}
+	copy, err := project.duplicateForm(form.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if copy.Menus[0].ID == file.ID || copy.Menus[0].Children[0].ID == recent.ID || copy.Menus[0].Children[0].Children[0].ID == item.ID {
+		t.Fatal("duplicated menus retained source IDs")
+	}
+	if err := project.validate(); err != nil {
+		t.Fatalf("duplicated menus are invalid: %v", err)
 	}
 }
 
@@ -125,6 +160,21 @@ func TestVersionTwoDesignWithoutComponentsIsUpgraded(t *testing.T) {
 	}
 }
 
+func TestVersionThreeDesignIsUpgraded(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "old-v3.rosaline")
+	data := []byte(`{"version":3,"module":"example.com/old","forms":[{"id":"form-1","name":"MainForm","title":"Old","width":720,"height":520,"padding":16,"theme":"Rosaline","root":{"id":"root","kind":"Column","component":"MainLayout"}}]}`)
+	if err := os.WriteFile(path, data, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	project, err := loadDesign(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if project.Version != designVersion || len(project.mainForm().Menus) != 0 {
+		t.Fatalf("version-3 design was not migrated: %#v", project)
+	}
+}
+
 func TestMoveRejectsCycles(t *testing.T) {
 	project := newProject()
 	row, err := project.addNear(project.mainForm().Root.ID, kindRow)
@@ -169,6 +219,16 @@ func TestWelcomeExampleLoads(t *testing.T) {
 	}
 	if project.mainForm().Title != "Welcome" || project.find("node-8") == nil {
 		t.Fatalf("unexpected welcome example: %#v", project)
+	}
+}
+
+func TestNotepadExampleLoadsWithMenus(t *testing.T) {
+	project, err := loadDesign(filepath.Join("examples", "notepad.rosaline"))
+	if err != nil {
+		t.Fatalf("load notepad example: %v", err)
+	}
+	if len(project.mainForm().Menus) != 3 || findDesignMenu(project.mainForm().Menus, "menu-15") == nil {
+		t.Fatalf("notepad menus are incomplete: %#v", project.mainForm().Menus)
 	}
 }
 

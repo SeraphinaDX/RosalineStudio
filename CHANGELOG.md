@@ -2,6 +2,23 @@
 
 All notable Rosaline Studio changes are documented here.
 
+## v0.5.0 - 2026-09-16
+
+- Add a Lazarus-style visual Menu Designer beside the Form and Code views.
+- Create top-level menus, menu items, nested submenus, and separators through
+  a hierarchical editor with reorder and delete commands.
+- Edit captions, keyboard shortcuts, and named click handlers from the Menu
+  inspector, then open those handlers directly in Studio's Go editor.
+- Show designed menu bars in the scaled form preview and reserve their space
+  when previewing widget layout.
+- Generate native Rosaline menu bars for every primary or secondary form,
+  including nested menus, shortcuts, separators, and application methods.
+- Add a complete visual notepad example demonstrating File, Edit, Help, and
+  nested menus with working text-editor commands.
+- Advance the strict design schema to version 4 and automatically migrate
+  version-2 and version-3 designs.
+- Require Rosaline v0.19.0 for composable nested menus.
+
 ## v0.4.0 - 2026-09-16
 
 - Add a Lazarus-style project form list with commands to create, duplicate,

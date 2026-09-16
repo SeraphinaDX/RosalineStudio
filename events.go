@@ -160,6 +160,15 @@ func projectHandlerSignatures(project *designProject) (map[string]handlerSignatu
 					return nil, err
 				}
 			}
+			var menuErr error
+			visitDesignMenus(form.Menus, func(menu *designMenu) {
+				if menuErr == nil && menu.Kind == menuKindItem {
+					menuErr = register(menu.Handler, false)
+				}
+			})
+			if menuErr != nil {
+				return nil, menuErr
+			}
 			if err := visit(form.Root); err != nil {
 				return nil, err
 			}

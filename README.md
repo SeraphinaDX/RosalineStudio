@@ -10,7 +10,7 @@ Rosaline Studio is itself a pure-Go Rosaline application. It builds with
 
 ![Screenshot](rosaline-studio.avif)
 
-## What v0.4.0 can do
+## What v0.5.0 can do
 
 - Design a primary form and any number of reusable secondary forms
 - Create, duplicate, rename, select, configure, and delete forms from the
@@ -23,6 +23,8 @@ Rosaline Studio is itself a pure-Go Rosaline application. It builds with
 - Cut, copy, paste, and duplicate complete widget subtrees
 - Give every control a Lazarus-style component name
 - Switch between Lazarus-style Form and Code views
+- Build complete menu bars in a dedicated visual Menu Designer
+- Add menu items, separators, nested submenus, shortcuts, and click handlers
 - Edit text, state names, sizing, spacing, and common options
 - Assign `OnClick`, `OnChange`, and `OnSubmit` methods in the Events inspector
 - Double-click a form control to create or edit its default event
@@ -50,10 +52,10 @@ before creating files or downloading modules.
 ## Requirements
 
 - Go 1.25 or newer
-- Rosaline v0.18.0 or newer
+- Rosaline v0.19.0 or newer
 - A graphical desktop supported by Rosaline
 
-Rosaline v0.18.0 must exist as a Git tag before a fresh clone can download the
+Rosaline v0.19.0 must exist as a Git tag before a fresh clone can download the
 dependency. If you keep both repositories side by side during development, a
 Go workspace can use your local Rosaline checkout instead.
 
@@ -137,6 +139,18 @@ designer field cannot erase those files.
 See [Designing multiple forms](docs/MULTIPLE_FORMS.md) for the complete form
 workflow and lifecycle-event model.
 
+## Visual menu designer
+
+Open the center **Menus** tab or choose **Project > Menu Designer**. Add a
+top-level menu such as File, select it, then add items, submenus, or separators.
+The right **Menu** inspector edits the caption, shortcut, and click-handler
+method. Double-click an item to open that method in the normal Code view.
+
+Studio generates the same menu hierarchy for the selected form and includes
+menu handlers in `events_generated.go`. See
+[Designing menus](docs/MENU_DESIGNER.md) and open
+[`examples/notepad.rosaline`](examples/notepad.rosaline) for a complete app.
+
 ## Supported designer widgets
 
 Layouts: `Column`, `Row`, `Grid`, `Stack`, `Card`, and `Scroll`.
@@ -144,8 +158,8 @@ Layouts: `Column`, `Row`, `Grid`, `Stack`, `Card`, and `Scroll`.
 Controls: `Label`, `Image`, `Button`, `TextBox`, `TextArea`, `CheckBox`,
 `ComboBox`, `Slider`, `ProgressBar`, and `Spacer`.
 
-Rosaline has more features than the v0.3 palette. Menus, dialogs, canvases,
-timers, tables, tabs, and custom widgets can already be added by hand
+Rosaline has more features than the current palette. Dialogs, canvases, timers,
+tables, tabs, and custom widgets can already be added by hand
 to the generated project and are candidates for later Studio releases.
 
 ## Design file
@@ -171,11 +185,11 @@ env CGO_ENABLED=0 ROSALINE_SOURCE=../Rosaline go test ./...
 
 ## Project status
 
-Rosaline Studio v0.4.0 is an intentionally small early release. Generated code
+Rosaline Studio v0.5.0 is an intentionally small early release. Generated code
 and saved designs are designed to stay understandable while the visual tooling
 grows. The design schema is versioned, but the Studio API and file format remain
 experimental until v1.0. Studio automatically migrates version-2 single-form
-designs to version 3; version-1 designs remain intentionally incompatible.
+designs to version 4; version-1 designs remain intentionally incompatible.
 
 ## License
 

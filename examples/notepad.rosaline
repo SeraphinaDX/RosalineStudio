@@ -1,0 +1,153 @@
+{
+  "version": 4,
+  "module": "example.com/rosaline-notepad",
+  "forms": [
+    {
+      "id": "form-1",
+      "name": "MainForm",
+      "title": "Rosaline Notepad",
+      "width": 840,
+      "height": 620,
+      "padding": 10,
+      "theme": "Rosaline",
+      "root": {
+        "id": "root",
+        "kind": "Column",
+        "component": "MainLayout",
+        "children": [
+          {
+            "id": "node-1",
+            "kind": "TextArea",
+            "component": "DocumentEditor",
+            "name": "Document",
+            "height": 520,
+            "expand": true
+          },
+          {
+            "id": "node-2",
+            "kind": "Label",
+            "component": "StatusLabel",
+            "text": "Ready"
+          }
+        ],
+        "gap": 8,
+        "padding": 8,
+        "expand": true
+      },
+      "events": {
+        "OnCloseRequest": "ConfirmClose"
+      },
+      "menus": [
+        {
+          "id": "menu-1",
+          "kind": "Menu",
+          "text": "File",
+          "children": [
+            {
+              "id": "menu-2",
+              "kind": "Item",
+              "text": "New",
+              "handler": "NewDocument",
+              "shortcut": "Primary+N"
+            },
+            {
+              "id": "menu-3",
+              "kind": "Menu",
+              "text": "Samples",
+              "children": [
+                {
+                  "id": "menu-4",
+                  "kind": "Item",
+                  "text": "Welcome Note",
+                  "handler": "OpenWelcomeNote"
+                }
+              ]
+            },
+            {
+              "id": "menu-5",
+              "kind": "Separator"
+            },
+            {
+              "id": "menu-6",
+              "kind": "Item",
+              "text": "Quit",
+              "handler": "QuitApplication",
+              "shortcut": "Primary+Q"
+            }
+          ]
+        },
+        {
+          "id": "menu-7",
+          "kind": "Menu",
+          "text": "Edit",
+          "children": [
+            {
+              "id": "menu-8",
+              "kind": "Item",
+              "text": "Undo",
+              "handler": "UndoEdit",
+              "shortcut": "Primary+Z"
+            },
+            {
+              "id": "menu-9",
+              "kind": "Item",
+              "text": "Redo",
+              "handler": "RedoEdit",
+              "shortcut": "Primary+Shift+Z"
+            },
+            {
+              "id": "menu-10",
+              "kind": "Separator"
+            },
+            {
+              "id": "menu-11",
+              "kind": "Item",
+              "text": "Cut",
+              "handler": "CutText",
+              "shortcut": "Primary+X"
+            },
+            {
+              "id": "menu-12",
+              "kind": "Item",
+              "text": "Copy",
+              "handler": "CopyText",
+              "shortcut": "Primary+C"
+            },
+            {
+              "id": "menu-13",
+              "kind": "Item",
+              "text": "Paste",
+              "handler": "PasteText",
+              "shortcut": "Primary+V"
+            }
+          ]
+        },
+        {
+          "id": "menu-14",
+          "kind": "Menu",
+          "text": "Help",
+          "children": [
+            {
+              "id": "menu-15",
+              "kind": "Item",
+              "text": "About",
+              "handler": "ShowAbout"
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "handlers": {
+    "ConfirmClose": "return rosaline.Confirm(\"Close Rosaline Notepad?\", \"Any text that has not been copied elsewhere will be lost.\")",
+    "NewDocument": "app.Widgets().DocumentEditor.SetText(\"\")\napp.Widgets().StatusLabel.SetText(\"New document\")\napp.Widgets().DocumentEditor.Focus()",
+    "OpenWelcomeNote": "app.Widgets().DocumentEditor.SetText(\"Welcome to Rosaline Notepad!\\n\\nThis application, its menus, and these click events were created visually in Rosaline Studio.\")\napp.Widgets().StatusLabel.SetText(\"Loaded welcome note\")",
+    "QuitApplication": "rosaline.Quit()",
+    "UndoEdit": "app.Widgets().DocumentEditor.Undo()",
+    "RedoEdit": "app.Widgets().DocumentEditor.Redo()",
+    "CutText": "app.Widgets().DocumentEditor.Cut()",
+    "CopyText": "app.Widgets().DocumentEditor.Copy()",
+    "PasteText": "app.Widgets().DocumentEditor.Paste()",
+    "ShowAbout": "rosaline.Message(\"Rosaline Notepad\", \"A menu-driven application designed visually with Rosaline Studio.\")"
+  }
+}
