@@ -10,7 +10,7 @@ Rosaline Studio is itself a pure-Go Rosaline application. It builds with
 
 ![Screenshot](rosaline-studio.avif)
 
-## What v0.9.0 can do
+## What v0.10.0 can do
 
 - Design a primary form and any number of reusable secondary forms
 - Create, duplicate, rename, select, configure, and delete forms from the
@@ -44,6 +44,11 @@ Rosaline Studio is itself a pure-Go Rosaline application. It builds with
 - Assign `OnClick`, `OnChange`, and `OnSubmit` methods in the Events inspector
 - Double-click a form control to create or edit its default event
 - Write event bodies in the integrated Go editor with syntax validation
+- Browse the complete generated project in a Lazarus-style Project Files tree
+- Open several Go files in source tabs with syntax coloring and unsaved marks
+- Create, rename, delete, format, and save developer-owned Go files
+- Inspect Studio-owned generated Go files safely in read-only mode
+- Build without running and open compiler errors at the exact file and line
 - Import PNG, JPEG, GIF, BMP, TIFF, WebP, and AVIF pictures
 - Preview, size, and embed image assets in generated applications
 - Configure each form's title, window size, padding, and theme
@@ -67,10 +72,10 @@ before creating files or downloading modules.
 ## Requirements
 
 - Go 1.25 or newer
-- Rosaline v0.19.0 or newer
+- Rosaline v0.20.0 or newer
 - A graphical desktop supported by Rosaline
 
-Rosaline v0.19.0 must exist as a Git tag before a fresh clone can download the
+Rosaline v0.20.0 must exist as a Git tag before a fresh clone can download the
 dependency. If you keep both repositories side by side during development, a
 Go workspace can use your local Rosaline checkout instead.
 
@@ -95,6 +100,9 @@ env CGO_ENABLED=0 go run .
 
 See [docs/QUICK_START.md](docs/QUICK_START.md) for the full first-project
 walkthrough.
+
+See [docs/SOURCE_EDITOR.md](docs/SOURCE_EDITOR.md) for editing handwritten Go,
+viewing generated code, formatting, and following build errors.
 
 ## The generated project
 
@@ -265,7 +273,7 @@ env CGO_ENABLED=0 ROSALINE_SOURCE=../Rosaline go test ./...
 
 ## Project status
 
-Rosaline Studio v0.9.0 is an intentionally small early release. Generated code
+Rosaline Studio v0.10.0 is an intentionally small early release. Generated code
 and saved designs are designed to stay understandable while the visual tooling
 grows. The design schema is versioned, but the Studio API and file format remain
 experimental until v1.0. Studio automatically migrates version-2 through
