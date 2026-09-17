@@ -70,6 +70,16 @@ func TestPreviewReflectsApplicationResolution(t *testing.T) {
 	}
 }
 
+func TestPreviewContentBoundsReservesToolbar(t *testing.T) {
+	form := newProject().mainForm()
+	without := previewContentBounds(form)
+	form.Toolbar = []*designToolbarItem{{ID: "tool-1", Kind: toolbarItemSeparator}}
+	with := previewContentBounds(form)
+	if with.Y <= without.Y || with.Height >= without.Height {
+		t.Fatalf("toolbar did not reserve preview space: without=%#v with=%#v", without, with)
+	}
+}
+
 func TestPreviewHitTestingPrefersDeepestWidget(t *testing.T) {
 	project := newProject()
 	boxes := layoutPreview(project.mainForm())

@@ -51,6 +51,7 @@ type projectInspectorState struct {
 }
 
 type menuInspectorState struct {
+	Action   string
 	Caption  string
 	Shortcut string
 	Handler  string
@@ -59,6 +60,7 @@ type menuInspectorState struct {
 const (
 	workspaceFormTab = iota
 	workspaceMenuTab
+	workspaceActionTab
 	workspaceCodeTab
 )
 
@@ -73,25 +75,35 @@ type studio struct {
 	inspector inspectorState
 	settings  projectInspectorState
 	menu      menuInspectorState
+	action    actionInspectorState
 	pageTitle string
 
-	palette    *rosaline.ListWidget
-	formList   *rosaline.ListWidget
-	formIDs    []string
-	syncForm   bool
-	tree       *rosaline.TreeWidget
-	canvas     *rosaline.CanvasWidget
-	workspace  *rosaline.TabsWidget
-	menuTree   *rosaline.TreeWidget
-	codeEditor *rosaline.TextAreaWidget
-	eventList  *rosaline.ListWidget
-	treeByID   map[string]*rosaline.TreeNode
-	menuByID   map[string]*rosaline.TreeNode
-	syncTree   bool
-	syncMenu   bool
-	menuID     string
-	tabPages   map[string]string
-	dragID     string
+	palette          *rosaline.ListWidget
+	formList         *rosaline.ListWidget
+	formIDs          []string
+	syncForm         bool
+	tree             *rosaline.TreeWidget
+	canvas           *rosaline.CanvasWidget
+	workspace        *rosaline.TabsWidget
+	menuTree         *rosaline.TreeWidget
+	actionList       *rosaline.ListWidget
+	toolbarList      *rosaline.ListWidget
+	menuActionChoice *rosaline.ComboBoxWidget
+	codeEditor       *rosaline.TextAreaWidget
+	eventList        *rosaline.ListWidget
+	treeByID         map[string]*rosaline.TreeNode
+	menuByID         map[string]*rosaline.TreeNode
+	syncTree         bool
+	syncMenu         bool
+	menuID           string
+	actionID         string
+	toolbarID        string
+	actionIDs        []string
+	toolbarIDs       []string
+	syncAction       bool
+	syncToolbar      bool
+	tabPages         map[string]string
+	dragID           string
 
 	availableEvents []eventSpec
 	selectedEvent   int
@@ -160,7 +172,7 @@ func (studio *studio) run() {
 
 	studio.canvas = rosaline.Canvas(func(canvas *rosaline.DrawingCanvas) {
 		form := studio.activeForm()
-		drawPreview(canvas, form, layoutPreview(form, studio.tabPages), studio.selectedID, studio.previewPicture)
+		drawPreview(canvas, studio.project, form, layoutPreview(form, studio.tabPages), studio.selectedID, studio.previewPicture)
 	}).Size(previewWidth, previewHeight).Focus()
 	studio.canvas.OnMouseDown(func(event rosaline.MouseEvent) {
 		if event.Button != rosaline.MouseLeft && event.Button != rosaline.MouseRight {
@@ -228,6 +240,18 @@ func (studio *studio) run() {
 		studio.selectMenu(node.Value())
 		studio.editMenuHandler()
 	})
+	studio.actionList = rosaline.List().Size(34, 16).Expand()
+	studio.actionList.OnSelect(func(index int, _ string) {
+		studio.selectAction(index)
+	}).OnActivate(func(index int, _ string) {
+		studio.selectAction(index)
+		studio.editActionHandler()
+	})
+	studio.toolbarList = rosaline.List().Size(34, 16).Expand()
+	studio.toolbarList.OnSelect(func(index int, _ string) {
+		studio.selectToolbarItem(index)
+	})
+	studio.menuActionChoice = rosaline.ComboBox(&studio.menu.Action, noSharedAction).Width(24)
 	studio.loadEvents()
 
 	studio.runTask = rosaline.Background(func(ctx context.Context, report *rosaline.TaskReporter) error {
@@ -296,6 +320,7 @@ func (studio *studio) run() {
 	studio.rebuildForms()
 	studio.rebuildTree()
 	studio.rebuildMenuTree()
+	studio.rebuildActions()
 
 	menu := rosaline.MenuBar(
 		rosaline.Menu("File",
@@ -329,6 +354,7 @@ func (studio *studio) run() {
 			rosaline.MenuItem("Delete Form", studio.deleteForm),
 			rosaline.MenuSeparator(),
 			rosaline.MenuItem("Menu Designer", studio.showMenuDesigner),
+			rosaline.MenuItem("Actions and Toolbar", studio.showActionDesigner),
 		),
 		rosaline.Menu("Help",
 			rosaline.MenuItem("Quick Help", studio.showHelp).Shortcut("F1"),
@@ -401,6 +427,7 @@ func (studio *studio) selectForm(id string) {
 	studio.formID = form.ID
 	studio.selectedID = form.Root.ID
 	studio.menuID = ""
+	studio.toolbarID = ""
 	studio.loadProjectInspector()
 	studio.refreshDesign()
 	studio.status = "Editing " + form.Name
@@ -482,9 +509,61 @@ func (studio *studio) buildWorkspace() rosaline.Widget {
 		).Gap(6),
 		rosaline.Label("Top-level menus become the window menu bar. Double-click an item to edit its click code.").Color(rosaline.DefaultTheme.Muted),
 	).Gap(8).Expand()
+	actions := rosaline.Column(
+		rosaline.Row(
+			rosaline.Label("Project Actions").Bold().Color(rosaline.Rose),
+			rosaline.Spring(),
+			rosaline.Button("New Action", studio.addAction).Primary(),
+		).Gap(6),
+		rosaline.Row(
+			rosaline.Column(
+				rosaline.Label("Reusable commands").Bold(),
+				studio.actionList,
+				rosaline.Row(
+					rosaline.Button("Duplicate", studio.duplicateAction),
+					rosaline.Button("Delete", studio.deleteAction),
+				).Gap(6),
+			).Gap(6).Expand(),
+			rosaline.Column(
+				rosaline.LabelFunc(func() string {
+					form := studio.activeForm()
+					if form == nil {
+						return "Form toolbar"
+					}
+					return form.Name + " toolbar"
+				}).Bold(),
+				studio.toolbarList,
+				rosaline.Row(
+					rosaline.Button("Add Action", studio.addSelectedActionToToolbar).Primary(),
+					rosaline.Button("Separator", studio.addToolbarSeparator),
+				).Gap(6),
+				rosaline.Row(
+					rosaline.Button("Left", func() { studio.moveToolbarItem(-1) }),
+					rosaline.Button("Right", func() { studio.moveToolbarItem(1) }),
+					rosaline.Button("Remove", studio.removeToolbarItem),
+				).Gap(6),
+			).Gap(6).Expand(),
+		).Gap(10).Expand(),
+		rosaline.Card(rosaline.Column(
+			rosaline.LabelFunc(studio.selectedActionLabel).Bold(),
+			rosaline.Grid(2,
+				inspectorField("Action name", rosaline.TextBox(&studio.action.Name).Width(22)),
+				inspectorField("Caption", rosaline.TextBox(&studio.action.Caption).Width(22)),
+				inspectorField("Shortcut", rosaline.TextBox(&studio.action.Shortcut).Width(22)),
+				inspectorField("Execute handler", rosaline.TextBox(&studio.action.Handler).Width(22)),
+			).Gap(6),
+			rosaline.Row(
+				rosaline.Button("Apply Action Properties", studio.applyActionInspector).Primary(),
+				rosaline.Button("Assign and Edit Execute", studio.editActionHandler),
+				rosaline.Spring(),
+				rosaline.Label("Changes flow to every linked menu item and toolbar button.").Color(rosaline.DefaultTheme.Muted),
+			).Gap(8),
+		).Gap(6)).Padding(7),
+	).Gap(8).Expand()
 	studio.workspace = rosaline.Tabs(
 		rosaline.Tab("Form", form),
 		rosaline.Tab("Menus", menus),
+		rosaline.Tab("Actions", actions),
 		rosaline.Tab("Code", code),
 	).Expand()
 	return rosaline.Card(studio.workspace).Padding(5).Expand()
@@ -584,6 +663,7 @@ func (studio *studio) buildInspectorPanel() rosaline.Widget {
 
 	menuPanel := rosaline.Column(
 		rosaline.LabelFunc(studio.selectedMenuLabel).Bold(),
+		inspectorField("Shared action", studio.menuActionChoice),
 		inspectorField("Caption", rosaline.TextBox(&studio.menu.Caption).Width(24)),
 		inspectorField("Shortcut", rosaline.TextBox(&studio.menu.Shortcut).Width(24)),
 		rosaline.Label("Examples: Primary+S, Primary+Shift+Z, F5").Color(rosaline.DefaultTheme.Muted),
@@ -593,7 +673,7 @@ func (studio *studio) buildInspectorPanel() rosaline.Widget {
 			rosaline.Button("Assign and Edit Click", studio.editMenuHandler).Primary(),
 			rosaline.Button("Clear Click", studio.clearMenuHandler),
 		).Gap(6),
-		rosaline.Label("Captions apply to menus and items. Shortcuts and click handlers apply to items.").Color(rosaline.DefaultTheme.Muted),
+		rosaline.Label("A shared action supplies an item's caption, shortcut, and click handler. Choose no shared action to edit them here.").Color(rosaline.DefaultTheme.Muted),
 	).Gap(8)
 
 	pagePanel := rosaline.Column(
@@ -1325,6 +1405,7 @@ func (studio *studio) refreshDesign() {
 	studio.loadProjectInspector()
 	studio.ensureMenuSelection()
 	studio.loadMenuInspector()
+	studio.rebuildActions()
 	studio.rebuildForms()
 	studio.rebuildTree()
 	studio.rebuildMenuTree()
@@ -1466,6 +1547,8 @@ func (studio *studio) newDesign() {
 	studio.formID = main.ID
 	studio.selectedID = main.Root.ID
 	studio.menuID = ""
+	studio.actionID = ""
+	studio.toolbarID = ""
 	studio.undo, studio.redo = nil, nil
 	studio.clipboard = nil
 	studio.dirty = false
@@ -1507,6 +1590,8 @@ func (studio *studio) openDesign() {
 	studio.formID = main.ID
 	studio.selectedID = main.Root.ID
 	studio.menuID = ""
+	studio.actionID = ""
+	studio.toolbarID = ""
 	studio.undo, studio.redo = nil, nil
 	studio.clipboard = nil
 	studio.dirty = false
@@ -1653,7 +1738,7 @@ func (studio *studio) documentName() string {
 func (studio *studio) showHelp() {
 	rosaline.Message(
 		"Rosaline Studio Quick Help",
-		"1. Select or create a form in Project Forms.\n2. Select a container and double-click a palette item to add it.\n3. Give controls memorable component names in Properties.\n4. Right-click to cut, copy, paste, duplicate, or delete widgets.\n5. Add Tabs, click a page header, and manage pages in the Pages inspector.\n6. Edit List, Table, Tree, or RadioGroup content under Properties > Data.\n7. Use Events to assign a handler, or double-click a form control.\n8. Open Menus to build the form's menu bar and edit item click handlers.\n9. Select a form's root layout to edit OnOpen, OnCloseRequest, and OnClose.\n10. Write event code with app.Widgets().Name and app.Windows().FormName.\n11. Press F5 to generate and run.\n\nStudio never overwrites handlers.go, main.go, go.mod, or README.md.",
+		"1. Select or create a form in Project Forms.\n2. Select a container and double-click a palette item to add it.\n3. Give controls memorable component names in Properties.\n4. Right-click to cut, copy, paste, duplicate, or delete widgets.\n5. Add Tabs, click a page header, and manage pages in the Pages inspector.\n6. Edit List, Table, Tree, or RadioGroup content under Properties > Data.\n7. Use Events to assign a handler, or double-click a form control.\n8. Open Menus to build the form's menu bar.\n9. Open Actions to share commands between menus and a form toolbar.\n10. Select a form's root layout to edit OnOpen, OnCloseRequest, and OnClose.\n11. Write event code with app.Widgets().Name and app.Windows().FormName.\n12. Press F5 to generate and run.\n\nStudio never overwrites handlers.go, main.go, go.mod, or README.md.",
 	)
 	studio.canvas.Focus()
 }
@@ -1661,7 +1746,7 @@ func (studio *studio) showHelp() {
 func (studio *studio) showAbout() {
 	rosaline.Message(
 		"About Rosaline Studio",
-		"Rosaline Studio v0.7.0\n\nA pure-Go Lazarus-style RAD environment built with Rosaline.\n\nGenerated code remains normal, readable Rosaline Go.",
+		"Rosaline Studio v0.8.0\n\nA pure-Go Lazarus-style RAD environment built with Rosaline.\n\nGenerated code remains normal, readable Rosaline Go.",
 	)
 	studio.canvas.Focus()
 }

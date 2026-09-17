@@ -27,6 +27,7 @@ The right **Menu** inspector provides:
 
 | Property | Applies to | Example |
 |---|---|---|
+| Shared action | Items | `SaveAction` |
 | Caption | Menus and items | `Save As...` |
 | Shortcut | Items | `Primary+Shift+S` |
 | Click handler | Items | `SaveAsClick` |
@@ -34,6 +35,11 @@ The right **Menu** inspector provides:
 Choose **Apply Menu Properties** after changing fields. Choose
 **Assign and Edit Click**, or double-click an item, to create and open its
 normal Go event method in the Code view.
+
+When **Shared action** is selected, that action supplies the item's caption,
+shortcut, and handler. Editing the action updates every linked menu item and
+toolbar button. Choose **(no shared action)** to use the item's local fields
+instead. See [Shared actions and visual toolbars](ACTIONS_TOOLBARS.md).
 
 ```go
 app.Widgets().StatusLabel.SetText("Saved")
@@ -76,5 +82,6 @@ files remain untouched.
 ## Complete example
 
 Open `examples/notepad.rosaline`, press F5, and try its File, Edit, and Help
-menus. It demonstrates nested menus, separators, shortcuts, editor operations,
-and a close-request event in one small application.
+menus and toolbar. It demonstrates shared actions, nested menus, separators,
+shortcuts, editor operations, and a close-request event in one small
+application.

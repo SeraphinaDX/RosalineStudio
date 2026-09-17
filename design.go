@@ -14,7 +14,7 @@ import (
 	"unicode/utf8"
 )
 
-const designVersion = 6
+const designVersion = 7
 
 type widgetKind string
 
@@ -97,21 +97,23 @@ type designNode struct {
 type designProject struct {
 	Version  int               `json:"version"`
 	Module   string            `json:"module"`
+	Actions  []*designAction   `json:"actions,omitempty"`
 	Forms    []*designForm     `json:"forms"`
 	Handlers map[string]string `json:"handlers,omitempty"`
 }
 
 type designForm struct {
-	ID      string            `json:"id"`
-	Name    string            `json:"name"`
-	Title   string            `json:"title"`
-	Width   int               `json:"width"`
-	Height  int               `json:"height"`
-	Padding int               `json:"padding"`
-	Theme   string            `json:"theme"`
-	Root    *designNode       `json:"root"`
-	Events  map[string]string `json:"events,omitempty"`
-	Menus   []*designMenu     `json:"menus,omitempty"`
+	ID      string               `json:"id"`
+	Name    string               `json:"name"`
+	Title   string               `json:"title"`
+	Width   int                  `json:"width"`
+	Height  int                  `json:"height"`
+	Padding int                  `json:"padding"`
+	Theme   string               `json:"theme"`
+	Root    *designNode          `json:"root"`
+	Events  map[string]string    `json:"events,omitempty"`
+	Menus   []*designMenu        `json:"menus,omitempty"`
+	Toolbar []*designToolbarItem `json:"toolbar,omitempty"`
 }
 
 type legacyDesignProject struct {
@@ -439,8 +441,10 @@ func (project *designProject) duplicateForm(id string) (*designForm, error) {
 	clone.Root = cloneDesignNode(source.Root)
 	clone.Events = cloneStringMap(source.Events)
 	clone.Menus = cloneDesignMenus(source.Menus)
+	clone.Toolbar = cloneDesignToolbar(source.Toolbar)
 	project.prepareCopiedSubtree(clone.Root)
 	project.prepareCopiedMenus(clone.Menus)
+	project.prepareCopiedToolbar(clone.Toolbar)
 	project.Forms = append(project.Forms, &clone)
 	return &clone, nil
 }
@@ -911,6 +915,10 @@ func (project *designProject) validate() error {
 	components := make(map[string]bool)
 	formIDs := make(map[string]bool)
 	formNames := make(map[string]bool)
+	actions, err := validateDesignActions(project, seen)
+	if err != nil {
+		return err
+	}
 	if err := validateProjectHandlers(project); err != nil {
 		return err
 	}
@@ -994,8 +1002,11 @@ func (project *designProject) validate() error {
 				return fmt.Errorf("form %s has invalid handler name %q", form.Name, handler)
 			}
 		}
-		if err := validateDesignMenus(form.Menus, seen); err != nil {
+		if err := validateDesignMenus(form.Menus, actions, seen); err != nil {
 			return fmt.Errorf("form %s menu: %w", form.Name, err)
+		}
+		if err := validateDesignToolbar(form, actions, seen); err != nil {
+			return fmt.Errorf("form %s toolbar: %w", form.Name, err)
 		}
 		if err := visit(form.Root, nil); err != nil {
 			return err
@@ -1062,7 +1073,7 @@ func loadDesign(path string) (*designProject, error) {
 			}},
 			Handlers: legacy.Handlers,
 		}
-	case 3, 4, 5, designVersion:
+	case 3, 4, 5, 6, designVersion:
 		if err := decodeStrict(data, &project); err != nil {
 			return nil, err
 		}

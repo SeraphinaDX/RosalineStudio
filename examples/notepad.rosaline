@@ -1,6 +1,16 @@
 {
-  "version": 6,
+  "version": 7,
   "module": "example.com/rosaline-notepad",
+  "actions": [
+    {"id": "action-1", "name": "NewAction", "text": "New", "handler": "NewDocument", "shortcut": "Primary+N"},
+    {"id": "action-2", "name": "UndoAction", "text": "Undo", "handler": "UndoEdit", "shortcut": "Primary+Z"},
+    {"id": "action-3", "name": "RedoAction", "text": "Redo", "handler": "RedoEdit", "shortcut": "Primary+Shift+Z"},
+    {"id": "action-4", "name": "CutAction", "text": "Cut", "handler": "CutText", "shortcut": "Primary+X"},
+    {"id": "action-5", "name": "CopyAction", "text": "Copy", "handler": "CopyText", "shortcut": "Primary+C"},
+    {"id": "action-6", "name": "PasteAction", "text": "Paste", "handler": "PasteText", "shortcut": "Primary+V"},
+    {"id": "action-7", "name": "QuitAction", "text": "Quit", "handler": "QuitApplication", "shortcut": "Primary+Q"},
+    {"id": "action-8", "name": "AboutAction", "text": "About", "handler": "ShowAbout"}
+  ],
   "forms": [
     {
       "id": "form-1",
@@ -46,9 +56,8 @@
             {
               "id": "menu-2",
               "kind": "Item",
-              "text": "New",
-              "handler": "NewDocument",
-              "shortcut": "Primary+N"
+              "action": "action-1",
+              "text": "New"
             },
             {
               "id": "menu-3",
@@ -70,9 +79,8 @@
             {
               "id": "menu-6",
               "kind": "Item",
-              "text": "Quit",
-              "handler": "QuitApplication",
-              "shortcut": "Primary+Q"
+              "action": "action-7",
+              "text": "Quit"
             }
           ]
         },
@@ -84,16 +92,14 @@
             {
               "id": "menu-8",
               "kind": "Item",
-              "text": "Undo",
-              "handler": "UndoEdit",
-              "shortcut": "Primary+Z"
+              "action": "action-2",
+              "text": "Undo"
             },
             {
               "id": "menu-9",
               "kind": "Item",
-              "text": "Redo",
-              "handler": "RedoEdit",
-              "shortcut": "Primary+Shift+Z"
+              "action": "action-3",
+              "text": "Redo"
             },
             {
               "id": "menu-10",
@@ -102,23 +108,20 @@
             {
               "id": "menu-11",
               "kind": "Item",
-              "text": "Cut",
-              "handler": "CutText",
-              "shortcut": "Primary+X"
+              "action": "action-4",
+              "text": "Cut"
             },
             {
               "id": "menu-12",
               "kind": "Item",
-              "text": "Copy",
-              "handler": "CopyText",
-              "shortcut": "Primary+C"
+              "action": "action-5",
+              "text": "Copy"
             },
             {
               "id": "menu-13",
               "kind": "Item",
-              "text": "Paste",
-              "handler": "PasteText",
-              "shortcut": "Primary+V"
+              "action": "action-6",
+              "text": "Paste"
             }
           ]
         },
@@ -130,11 +133,21 @@
             {
               "id": "menu-15",
               "kind": "Item",
-              "text": "About",
-              "handler": "ShowAbout"
+              "action": "action-8",
+              "text": "About"
             }
           ]
         }
+      ],
+      "toolbar": [
+        {"id": "tool-1", "kind": "Action", "action": "action-1"},
+        {"id": "tool-2", "kind": "Separator"},
+        {"id": "tool-3", "kind": "Action", "action": "action-2"},
+        {"id": "tool-4", "kind": "Action", "action": "action-3"},
+        {"id": "tool-5", "kind": "Separator"},
+        {"id": "tool-6", "kind": "Action", "action": "action-4"},
+        {"id": "tool-7", "kind": "Action", "action": "action-5"},
+        {"id": "tool-8", "kind": "Action", "action": "action-6"}
       ]
     }
   ],

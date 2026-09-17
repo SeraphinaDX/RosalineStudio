@@ -79,12 +79,20 @@ func previewContentBounds(form *designForm) previewRect {
 	window := previewWindowBounds(form)
 	titleHeight := min(30.0, max(22.0, window.Height*0.065))
 	menuHeight := previewMenuHeight(form, window)
+	toolbarHeight := previewToolbarHeight(form, window)
 	return previewRect{
 		X:      window.X + 6,
-		Y:      window.Y + titleHeight + menuHeight + 6,
+		Y:      window.Y + titleHeight + menuHeight + toolbarHeight + 6,
 		Width:  max(1, window.Width-12),
-		Height: max(1, window.Height-titleHeight-menuHeight-12),
+		Height: max(1, window.Height-titleHeight-menuHeight-toolbarHeight-12),
 	}
+}
+
+func previewToolbarHeight(form *designForm, window previewRect) float64 {
+	if form == nil || len(form.Toolbar) == 0 {
+		return 0
+	}
+	return min(34.0, max(25.0, window.Height*0.06))
 }
 
 func previewMenuHeight(form *designForm, window previewRect) float64 {
@@ -418,7 +426,7 @@ func paletteFor(theme string) previewPalette {
 	}
 }
 
-func drawPreview(canvas *rosaline.DrawingCanvas, form *designForm, boxes []previewBox, selectedID string, resolvers ...func(string) *rosaline.Picture) {
+func drawPreview(canvas *rosaline.DrawingCanvas, project *designProject, form *designForm, boxes []previewBox, selectedID string, resolvers ...func(string) *rosaline.Picture) {
 	outer := rosaline.Hex("#ead7e3")
 	canvas.Clear(outer)
 	if form == nil {
@@ -445,6 +453,35 @@ func drawPreview(canvas *rosaline.DrawingCanvas, form *designForm, boxes []previ
 			}
 			canvas.Text(menu.Text, x, menuY+4, rosaline.TextStyle{Color: colors.text, Size: 10})
 			x += float64(len(menu.Text)*7 + 20)
+		}
+	}
+	toolbarHeight := previewToolbarHeight(form, window)
+	if toolbarHeight > 0 {
+		toolbarY := window.Y + titleHeight + menuHeight
+		canvas.FillRect(window.X, toolbarY, window.Width, toolbarHeight, colors.surface)
+		canvas.Line(window.X, toolbarY+toolbarHeight, window.X+window.Width, toolbarY+toolbarHeight, 1, colors.border)
+		x := window.X + 7
+		for _, item := range form.Toolbar {
+			if item == nil {
+				continue
+			}
+			if item.Kind == toolbarItemSeparator {
+				canvas.Line(x+3, toolbarY+5, x+3, toolbarY+toolbarHeight-5, 1, colors.border)
+				x += 12
+				continue
+			}
+			action := project.action(item.Action)
+			if action == nil {
+				continue
+			}
+			width := min(140.0, max(54.0, float64(len([]rune(action.Text))*7+22)))
+			if x+width > window.X+window.Width-6 {
+				break
+			}
+			canvas.FillRect(x, toolbarY+4, width, toolbarHeight-8, colors.background)
+			canvas.Rect(x, toolbarY+4, width, toolbarHeight-8, 1, colors.border)
+			canvas.Text(action.Text, x+9, toolbarY+max(6, toolbarHeight/2-7), rosaline.TextStyle{Color: colors.text, Size: 10})
+			x += width + 5
 		}
 	}
 	content := previewContentBounds(form)

@@ -133,6 +133,52 @@ func TestGeneratorCreatesNestedMenusAndClickHandlers(t *testing.T) {
 	}
 }
 
+func TestGeneratorSharesActionsBetweenMenusAndToolbar(t *testing.T) {
+	project := newProject()
+	action := project.addAction()
+	action.Name = "SaveAction"
+	action.Text = "Save"
+	action.Handler = "SaveDocument"
+	action.Shortcut = "Primary+S"
+	project.Handlers[action.Handler] = `app.Widgets().WelcomeLabel.SetText("Saved")`
+	form := project.mainForm()
+	form.Menus = []*designMenu{{
+		ID: "menu-1", Kind: menuKindMenu, Text: "File",
+		Children: []*designMenu{{ID: "menu-2", Kind: menuKindItem, Action: action.ID, Text: "Fallback"}},
+	}}
+	form.Toolbar = []*designToolbarItem{
+		{ID: "tool-1", Kind: toolbarItemAction, Action: action.ID},
+		{ID: "tool-2", Kind: toolbarItemSeparator},
+	}
+
+	directory := t.TempDir()
+	if _, err := generateProject(project, directory); err != nil {
+		t.Fatal(err)
+	}
+	uiData, err := os.ReadFile(filepath.Join(directory, "ui_generated.go"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	eventsData, err := os.ReadFile(filepath.Join(directory, "events_generated.go"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	ui := string(uiData)
+	for _, want := range []string{
+		`rosaline.MenuItem("Save", func() { app.SaveDocument() }).Shortcut("Primary+S")`,
+		`rosaline.Button("Save", func() { app.SaveDocument() })`,
+		`rosaline.Separator().Vertical()`,
+	} {
+		if !strings.Contains(ui, want) {
+			t.Fatalf("generated shared action UI is missing %q:\n%s", want, ui)
+		}
+	}
+	if strings.Count(string(eventsData), "func (app *Application) SaveDocument()") != 1 {
+		t.Fatalf("shared action handler was not generated exactly once:\n%s", eventsData)
+	}
+	parseGeneratedGo(t, directory)
+}
+
 func TestGeneratorCreatesTabsPagesAndChangeEvent(t *testing.T) {
 	project := newProject()
 	root := project.mainForm().Root
@@ -551,6 +597,15 @@ func TestGeneratedApplicationBuilds(t *testing.T) {
 	secondary.Menus = []*designMenu{{ID: "menu-5", Kind: menuKindMenu, Text: "Help"}}
 	project.Handlers["RunClick"] = "// Run."
 	project.Handlers["RecentClick"] = "// Recent."
+	action := project.addAction()
+	action.Name, action.Text, action.Handler, action.Shortcut = "RefreshAction", "Refresh", "RefreshClick", "Primary+R"
+	project.Handlers[action.Handler] = "// Refresh."
+	project.mainForm().Menus[0].Children = append(project.mainForm().Menus[0].Children,
+		&designMenu{ID: "menu-6", Kind: menuKindItem, Action: action.ID, Text: "Refresh"})
+	project.mainForm().Toolbar = []*designToolbarItem{
+		{ID: "tool-1", Kind: toolbarItemAction, Action: action.ID},
+		{ID: "tool-2", Kind: toolbarItemSeparator},
+	}
 	for _, kind := range paletteKinds {
 		if _, err := project.addNear(project.mainForm().Root.ID, kind); err != nil {
 			t.Fatalf("add %s: %v", kind, err)

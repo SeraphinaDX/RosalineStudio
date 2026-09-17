@@ -174,6 +174,13 @@ func projectHandlerSignatures(project *designProject) (map[string]handlerSignatu
 		return nil
 	}
 	if project != nil {
+		for _, action := range project.Actions {
+			if action != nil {
+				if err := register(action.Handler, false); err != nil {
+					return nil, err
+				}
+			}
+		}
 		for _, form := range project.Forms {
 			if form == nil {
 				continue
@@ -185,7 +192,7 @@ func projectHandlerSignatures(project *designProject) (map[string]handlerSignatu
 			}
 			var menuErr error
 			visitDesignMenus(form.Menus, func(menu *designMenu) {
-				if menuErr == nil && menu.Kind == menuKindItem {
+				if menuErr == nil && menu.Kind == menuKindItem && menu.Action == "" {
 					menuErr = register(menu.Handler, false)
 				}
 			})

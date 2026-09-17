@@ -315,8 +315,8 @@ func generatedPicture(name string) *rosaline.Picture {
 	var builders strings.Builder
 	var themes strings.Builder
 	for _, form := range project.Forms {
-		fmt.Fprintf(&builders, "func build%s(app *Application) rosaline.Widget {\n\treturn %s\n}\n\n", form.Name, generateNode(form.Root, context, 1))
-		builders.WriteString(generateFormMenu(form))
+		fmt.Fprintf(&builders, "func build%s(app *Application) rosaline.Widget {\n\treturn %s\n}\n\n", form.Name, generateFormContent(project, form, context))
+		builders.WriteString(generateFormMenu(project, form))
 		themes.WriteString(generatedTheme(form.Theme, "theme"+form.Name))
 		themes.WriteString("\n\n")
 	}
@@ -355,7 +355,47 @@ func rememberWidget[T rosaline.Widget](slot *T, widget T) T {
 %s`, generatedMarker, imports, assetSupport, setup.String(), main.Title, max(320, main.Width), max(240, main.Height), max(0, main.Padding), main.Name, main.Name, generatedFormCallbacks(main, 2), main.Name, builders.String(), themes.String())
 }
 
-func generateFormMenu(form *designForm) string {
+func generateFormContent(project *designProject, form *designForm, context *generationContext) string {
+	if len(form.Toolbar) == 0 {
+		return generateNode(form.Root, context, 1)
+	}
+	var result strings.Builder
+	result.WriteString("rosaline.Column(\n")
+	fmt.Fprintf(&result, "\t\t%s,\n", generateToolbar(project, form, 2))
+	fmt.Fprintf(&result, "\t\t%s,\n", generateNode(form.Root, context, 2))
+	result.WriteString("\t).Gap(6).Expand()")
+	return result.String()
+}
+
+func generateToolbar(project *designProject, form *designForm, depth int) string {
+	indent := strings.Repeat("\t", depth)
+	childIndent := strings.Repeat("\t", depth+1)
+	var result strings.Builder
+	result.WriteString("rosaline.Card(rosaline.Row(\n")
+	for _, item := range form.Toolbar {
+		if item == nil {
+			continue
+		}
+		switch item.Kind {
+		case toolbarItemSeparator:
+			fmt.Fprintf(&result, "%srosaline.Separator().Vertical(),\n", childIndent)
+		case toolbarItemAction:
+			action := project.action(item.Action)
+			if action == nil {
+				continue
+			}
+			callback := "nil"
+			if handler := strings.TrimSpace(action.Handler); handler != "" {
+				callback = "func() { app." + handler + "() }"
+			}
+			fmt.Fprintf(&result, "%srosaline.Button(%q, %s),\n", childIndent, action.Text, callback)
+		}
+	}
+	fmt.Fprintf(&result, "%s).Gap(4)).Padding(4)", indent)
+	return result.String()
+}
+
+func generateFormMenu(project *designProject, form *designForm) string {
 	var result strings.Builder
 	fmt.Fprintf(&result, "func build%sMenu(app *Application) *rosaline.AppMenuBar {\n", form.Name)
 	if len(form.Menus) == 0 {
@@ -364,13 +404,13 @@ func generateFormMenu(form *designForm) string {
 	}
 	result.WriteString("\treturn rosaline.MenuBar(\n")
 	for _, menu := range form.Menus {
-		fmt.Fprintf(&result, "\t\t%s,\n", generateMenuEntry(menu, 2))
+		fmt.Fprintf(&result, "\t\t%s,\n", generateMenuEntry(project, menu, 2))
 	}
 	result.WriteString("\t)\n}\n\n")
 	return result.String()
 }
 
-func generateMenuEntry(menu *designMenu, depth int) string {
+func generateMenuEntry(project *designProject, menu *designMenu, depth int) string {
 	if menu == nil {
 		return "rosaline.MenuSeparator()"
 	}
@@ -378,12 +418,16 @@ func generateMenuEntry(menu *designMenu, depth int) string {
 	case menuKindSeparator:
 		return "rosaline.MenuSeparator()"
 	case menuKindItem:
+		text, handler, shortcut := menu.Text, menu.Handler, menu.Shortcut
+		if action := project.action(menu.Action); action != nil {
+			text, handler, shortcut = action.Text, action.Handler, action.Shortcut
+		}
 		callback := "nil"
-		if handler := strings.TrimSpace(menu.Handler); handler != "" {
+		if handler = strings.TrimSpace(handler); handler != "" {
 			callback = "func() { app." + handler + "() }"
 		}
-		result := fmt.Sprintf("rosaline.MenuItem(%q, %s)", menu.Text, callback)
-		if shortcut := strings.TrimSpace(menu.Shortcut); shortcut != "" {
+		result := fmt.Sprintf("rosaline.MenuItem(%q, %s)", text, callback)
+		if shortcut = strings.TrimSpace(shortcut); shortcut != "" {
 			result += fmt.Sprintf(".Shortcut(%q)", shortcut)
 		}
 		return result
@@ -396,7 +440,7 @@ func generateMenuEntry(menu *designMenu, depth int) string {
 		var result strings.Builder
 		fmt.Fprintf(&result, "rosaline.Menu(%q,\n", menu.Text)
 		for _, child := range menu.Children {
-			fmt.Fprintf(&result, "%s%s,\n", childIndent, generateMenuEntry(child, depth+1))
+			fmt.Fprintf(&result, "%s%s,\n", childIndent, generateMenuEntry(project, child, depth+1))
 		}
 		result.WriteString(indent + ")")
 		return result.String()
@@ -502,6 +546,13 @@ func referencedHandlers(project *designProject) []string {
 		}
 	}
 	if project != nil {
+		for _, action := range project.Actions {
+			if action != nil {
+				if handler := strings.TrimSpace(action.Handler); handler != "" {
+					seen[handler] = true
+				}
+			}
+		}
 		for _, form := range project.Forms {
 			if form == nil {
 				continue
@@ -512,6 +563,9 @@ func referencedHandlers(project *designProject) []string {
 				}
 			}
 			visitDesignMenus(form.Menus, func(menu *designMenu) {
+				if menu.Action != "" {
+					return
+				}
 				if handler := strings.TrimSpace(menu.Handler); handler != "" {
 					seen[handler] = true
 				}

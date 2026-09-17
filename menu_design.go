@@ -19,6 +19,7 @@ const (
 type designMenu struct {
 	ID       string        `json:"id"`
 	Kind     menuKind      `json:"kind"`
+	Action   string        `json:"action,omitempty"`
 	Text     string        `json:"text,omitempty"`
 	Handler  string        `json:"handler,omitempty"`
 	Shortcut string        `json:"shortcut,omitempty"`
@@ -199,7 +200,7 @@ func removeDesignMenu(form *designForm, id string) error {
 	return nil
 }
 
-func validateDesignMenus(menus []*designMenu, seen map[string]bool) error {
+func validateDesignMenus(menus []*designMenu, actions map[string]*designAction, seen map[string]bool) error {
 	var validate func([]*designMenu, bool) error
 	validate = func(entries []*designMenu, topLevel bool) error {
 		for _, entry := range entries {
@@ -218,8 +219,8 @@ func validateDesignMenus(menus []*designMenu, seen map[string]bool) error {
 				if strings.TrimSpace(entry.Text) == "" {
 					return errors.New("a menu has an empty caption")
 				}
-				if entry.Handler != "" || entry.Shortcut != "" {
-					return fmt.Errorf("menu %q cannot have a handler or shortcut", entry.Text)
+				if entry.Action != "" || entry.Handler != "" || entry.Shortcut != "" {
+					return fmt.Errorf("menu %q cannot have an action, handler, or shortcut", entry.Text)
 				}
 				if err := validate(entry.Children, false); err != nil {
 					return err
@@ -231,6 +232,9 @@ func validateDesignMenus(menus []*designMenu, seen map[string]bool) error {
 				if len(entry.Children) != 0 {
 					return fmt.Errorf("menu item %q cannot contain entries", entry.Text)
 				}
+				if entry.Action != "" && actions[entry.Action] == nil {
+					return fmt.Errorf("menu item %q refers to missing action %q", entry.Text, entry.Action)
+				}
 				if entry.Handler != "" && !validHandlerName(entry.Handler) {
 					return fmt.Errorf("menu item %q has invalid handler name %q", entry.Text, entry.Handler)
 				}
@@ -238,7 +242,7 @@ func validateDesignMenus(menus []*designMenu, seen map[string]bool) error {
 					return fmt.Errorf("menu item %q: %w", entry.Text, err)
 				}
 			case menuKindSeparator:
-				if entry.Text != "" || entry.Handler != "" || entry.Shortcut != "" || len(entry.Children) != 0 {
+				if entry.Action != "" || entry.Text != "" || entry.Handler != "" || entry.Shortcut != "" || len(entry.Children) != 0 {
 					return errors.New("a separator cannot have properties or children")
 				}
 			default:

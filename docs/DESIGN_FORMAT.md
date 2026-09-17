@@ -1,14 +1,15 @@
 # Rosaline design format
 
 Rosaline Studio stores visual projects as UTF-8 JSON files ending in
-`.rosaline`. The current schema version is `6`.
+`.rosaline`. The current schema version is `7`.
 
 ## Project fields
 
 | Field | Type | Meaning |
 |---|---|---|
-| `version` | integer | Design schema version; currently `6` |
+| `version` | integer | Design schema version; currently `7` |
 | `module` | string | Generated Go module path |
+| `actions` | action array | Reusable commands shared by menu items and toolbars |
 | `forms` | form array | Primary form first, followed by reusable secondary forms |
 | `handlers` | object | Go event bodies keyed by handler method name |
 
@@ -29,6 +30,7 @@ by the primary form.
 | `root` | widget | Root layout for this form |
 | `events` | object | `OnOpen`, `OnCloseRequest`, or `OnClose` handler methods |
 | `menus` | menu array | Top-level menus for this form's native menu bar |
+| `toolbar` | toolbar item array | Ordered action buttons and separators for this form |
 
 `OnCloseRequest` is the one boolean event. Its handler must return `true` to
 allow the close or `false` to keep the form open. Other form and widget event
@@ -43,11 +45,30 @@ Every menu entry has a globally unique `id` and a `kind` of `Menu`, `Item`, or
 |---|---|---|
 | `text` | menus and items | Visible caption |
 | `children` | menus | Nested items, submenus, and separators |
+| `action` | items | Optional shared project-action ID |
 | `handler` | items | Named no-result click method |
 | `shortcut` | items | Rosaline shortcut such as `Primary+S` or `F5` |
 
 Separators have no other fields. Menus cannot have handlers or shortcuts, and
-items cannot contain children.
+items cannot contain children. When an item has `action`, the shared action's
+caption, handler, and shortcut take precedence over its local fallback values.
+
+## Actions and toolbars
+
+Every project action has a globally unique internal `id` and a unique exported
+`name` such as `SaveAction`.
+
+| Field | Meaning |
+|---|---|
+| `id` | Stable internal action identity |
+| `name` | Exported designer name |
+| `text` | Caption used by linked menu items and toolbar buttons |
+| `handler` | Optional no-result execute method |
+| `shortcut` | Optional menu shortcut such as `Primary+S` |
+
+Each form's `toolbar` contains items with a unique `id` and a `kind` of
+`Action` or `Separator`. Action items also have an `action` field referring to
+a project-action ID. Separators have no action field.
 
 ## Widget fields
 
@@ -161,8 +182,17 @@ string named by `name` and support `OnChange`.
 
 ```json
 {
-  "version": 6,
+  "version": 7,
   "module": "example.com/greeting",
+  "actions": [
+    {
+      "id": "action-1",
+      "name": "SettingsAction",
+      "text": "Settings",
+      "handler": "ShowSettings",
+      "shortcut": "Primary+,"
+    }
+  ],
   "forms": [
     {
       "id": "form-1",
@@ -198,12 +228,14 @@ string named by `name` and support `OnChange`.
             {
               "id": "menu-2",
               "kind": "Item",
-              "text": "Settings",
-              "handler": "ShowSettings",
-              "shortcut": "Primary+,"
+              "action": "action-1",
+              "text": "Settings"
             }
           ]
         }
+      ],
+      "toolbar": [
+        {"id": "tool-1", "kind": "Action", "action": "action-1"}
       ]
     },
     {
@@ -241,7 +273,7 @@ names, handler identifiers, handler return shape, and Go syntax. Widget moves
 stay within a form, while copy and paste can safely cross forms.
 
 Studio automatically migrates version-2 single-form and version-3 through
-version-5 multi-form designs to version 6; save the file to keep the upgraded
+version-6 multi-form designs to version 7; save the file to keep the upgraded
 structure. Version-1 designs used a generic string action dispatcher and
 remain intentionally incompatible.
 Commit important design files to Git before opening them in a newer Studio
