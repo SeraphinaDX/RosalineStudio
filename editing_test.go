@@ -3,6 +3,7 @@
 package main
 
 import (
+	"reflect"
 	"strings"
 	"testing"
 )
@@ -137,5 +138,20 @@ func TestPasteIntoTabsUsesTheActivePage(t *testing.T) {
 	pasted := studio.project.find(studio.selectedID)
 	if pasted == nil || studio.project.parentOf(pasted.ID) != active {
 		t.Fatalf("pasted widget did not enter active page: %#v", pasted)
+	}
+}
+
+func TestInspectorAppliesMultilineData(t *testing.T) {
+	studio := newStudio()
+	list, err := studio.project.addNear(studio.project.mainForm().Root.ID, kindList)
+	if err != nil {
+		t.Fatal(err)
+	}
+	studio.selectedID = list.ID
+	studio.loadInspector()
+	studio.inspector.Data = "Alpha\n\nBeta\n Gamma "
+	studio.applyInspector()
+	if !reflect.DeepEqual(list.Data, []string{"Alpha", "Beta", "Gamma"}) {
+		t.Fatalf("unexpected list data: %v", list.Data)
 	}
 }

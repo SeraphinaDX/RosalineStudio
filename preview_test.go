@@ -112,6 +112,30 @@ func TestPreviewShowsOnlyTheActiveTabPage(t *testing.T) {
 	}
 }
 
+func TestPreviewLaysOutDataControls(t *testing.T) {
+	project := newProject()
+	root := project.mainForm().Root
+	root.Children = nil
+	for _, kind := range []widgetKind{kindList, kindTable, kindTree, kindRadioGroup} {
+		if _, err := project.addNear(root.ID, kind); err != nil {
+			t.Fatal(err)
+		}
+	}
+	boxes := layoutPreview(project.mainForm())
+	seen := make(map[widgetKind]bool)
+	for _, box := range boxes {
+		if box.Rect.Width <= 0 || box.Rect.Height <= 0 {
+			t.Fatalf("invalid preview box: %#v", box)
+		}
+		seen[box.Node.Kind] = true
+	}
+	for _, kind := range []widgetKind{kindList, kindTable, kindTree, kindRadioGroup} {
+		if !seen[kind] {
+			t.Fatalf("preview is missing %s", kind)
+		}
+	}
+}
+
 func TestTailOutput(t *testing.T) {
 	if got := tailOutput("  short output  ", 50); got != "short output" {
 		t.Fatalf("unexpected short output: %q", got)

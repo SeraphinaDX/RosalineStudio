@@ -293,7 +293,7 @@ func previewNaturalSize(node *designNode, horizontal bool) float64 {
 			return min(240, max(130, float64(len([]rune(node.Text))*7+42)))
 		case kindSpacer:
 			return 24
-		case kindColumn, kindRow, kindGrid, kindStack, kindCard, kindScroll, kindTabs, kindTabPage:
+		case kindColumn, kindRow, kindGrid, kindStack, kindCard, kindScroll, kindTabs, kindTabPage, kindList, kindTable, kindTree, kindRadioGroup:
 			return 220
 		default:
 			return 180
@@ -310,6 +310,10 @@ func previewNaturalSize(node *designNode, horizontal bool) float64 {
 		return 160
 	case kindScroll, kindTabs:
 		return 180
+	case kindList, kindTable, kindTree:
+		return 170
+	case kindRadioGroup:
+		return max(42, float64(len(parseRadioData(node.Data))*28+8))
 	case kindColumn, kindRow, kindGrid, kindStack, kindCard, kindTabPage:
 		return previewNaturalContainerHeight(node)
 	case kindSpacer:
@@ -535,6 +539,14 @@ func drawPreviewNode(canvas *rosaline.DrawingCanvas, box previewBox, colors prev
 			label = node.Options[0]
 		}
 		drawInput(canvas, rectangle, label+"  v", colors, outline, selected)
+	case kindRadioGroup:
+		drawRadioPreview(canvas, rectangle, node, colors, outline, selected)
+	case kindList:
+		drawListPreview(canvas, rectangle, node, colors, outline, selected)
+	case kindTable:
+		drawTablePreview(canvas, rectangle, node, colors, outline, selected)
+	case kindTree:
+		drawTreePreview(canvas, rectangle, node, colors, outline, selected)
 	case kindSlider:
 		centerY := rectangle.Y + rectangle.Height/2
 		canvas.Line(rectangle.X+10, centerY, rectangle.X+rectangle.Width-10, centerY, 3, colors.border)
@@ -561,6 +573,99 @@ func drawInput(canvas *rosaline.DrawingCanvas, rectangle previewRect, label stri
 	canvas.FillRect(rectangle.X+2, rectangle.Y+3, rectangle.Width-4, rectangle.Height-6, colors.surface)
 	canvas.Rect(rectangle.X+2, rectangle.Y+3, rectangle.Width-4, rectangle.Height-6, strokeFor(selected), outline)
 	canvas.Text(label, rectangle.X+10, rectangle.Y+max(7, rectangle.Height/2-7), rosaline.TextStyle{Color: colors.muted, Size: fontSizeFor(rectangle)})
+}
+
+func drawDataSurface(canvas *rosaline.DrawingCanvas, rectangle previewRect, colors previewPalette, outline rosaline.Color, selected bool) {
+	canvas.FillRect(rectangle.X+1, rectangle.Y+1, max(1, rectangle.Width-2), max(1, rectangle.Height-2), colors.surface)
+	canvas.Rect(rectangle.X, rectangle.Y, rectangle.Width, rectangle.Height, strokeFor(selected), outline)
+}
+
+func drawListPreview(canvas *rosaline.DrawingCanvas, rectangle previewRect, node *designNode, colors previewPalette, outline rosaline.Color, selected bool) {
+	drawDataSurface(canvas, rectangle, colors, outline, selected)
+	y := rectangle.Y + 5
+	for index, item := range node.Data {
+		if y+18 > rectangle.Y+rectangle.Height {
+			break
+		}
+		textColor := colors.text
+		if index == 0 {
+			canvas.FillRect(rectangle.X+3, y-2, max(1, rectangle.Width-10), 18, colors.primary)
+			textColor = rosaline.White
+		}
+		canvas.Text(defaultText(item, "Item"), rectangle.X+8, y, rosaline.TextStyle{Color: textColor, Size: 10})
+		y += 20
+	}
+}
+
+func drawTablePreview(canvas *rosaline.DrawingCanvas, rectangle previewRect, node *designNode, colors previewPalette, outline rosaline.Color, selected bool) {
+	drawDataSurface(canvas, rectangle, colors, outline, selected)
+	columns, rows := parseTableData(node.Data)
+	columnWidth := max(1, (rectangle.Width-4)/float64(max(1, len(columns))))
+	headerHeight := min(24.0, rectangle.Height)
+	canvas.FillRect(rectangle.X+2, rectangle.Y+2, max(1, rectangle.Width-4), max(1, headerHeight-2), colors.primary)
+	for index, column := range columns {
+		x := rectangle.X + 4 + float64(index)*columnWidth
+		canvas.Text(defaultText(column, "Column"), x+3, rectangle.Y+5, rosaline.TextStyle{Color: rosaline.White, Size: 9})
+		if index > 0 {
+			canvas.Line(x, rectangle.Y+2, x, rectangle.Y+rectangle.Height-2, 1, colors.border)
+		}
+	}
+	y := rectangle.Y + headerHeight + 4
+	for _, row := range rows {
+		if y+17 > rectangle.Y+rectangle.Height {
+			break
+		}
+		for column := range columns {
+			value := ""
+			if column < len(row) {
+				value = row[column]
+			}
+			x := rectangle.X + 4 + float64(column)*columnWidth
+			canvas.Text(defaultText(value, ""), x+3, y, rosaline.TextStyle{Color: colors.text, Size: 9})
+		}
+		y += 19
+		canvas.Line(rectangle.X+3, y-3, rectangle.X+rectangle.Width-3, y-3, 1, colors.border)
+	}
+}
+
+func drawTreePreview(canvas *rosaline.DrawingCanvas, rectangle previewRect, node *designNode, colors previewPalette, outline rosaline.Color, selected bool) {
+	drawDataSurface(canvas, rectangle, colors, outline, selected)
+	y := rectangle.Y + 5
+	for index, path := range node.Data {
+		if y+18 > rectangle.Y+rectangle.Height {
+			break
+		}
+		parts := strings.Split(path, "/")
+		label := strings.TrimSpace(parts[len(parts)-1])
+		indent := float64(max(0, len(parts)-1)) * 15
+		prefix := "•"
+		if index+1 < len(node.Data) && strings.HasPrefix(node.Data[index+1], strings.TrimRight(path, "/")+"/") {
+			prefix = "▾"
+		}
+		canvas.Text(prefix+" "+defaultText(label, "Item"), rectangle.X+7+indent, y, rosaline.TextStyle{Color: colors.text, Size: 10})
+		y += 19
+	}
+}
+
+func drawRadioPreview(canvas *rosaline.DrawingCanvas, rectangle previewRect, node *designNode, colors previewPalette, outline rosaline.Color, selected bool) {
+	drawDataSurface(canvas, rectangle, colors, outline, selected)
+	choices := parseRadioData(node.Data)
+	x, y := rectangle.X+8, rectangle.Y+7
+	for index, choice := range choices {
+		if x+20 > rectangle.X+rectangle.Width || y+18 > rectangle.Y+rectangle.Height {
+			break
+		}
+		canvas.Circle(x+7, y+7, 6, 1, colors.border)
+		if index == 0 {
+			canvas.FillCircle(x+7, y+7, 3, colors.primary)
+		}
+		canvas.Text(defaultText(choice.Label, "Choice"), x+20, y, rosaline.TextStyle{Color: colors.text, Size: 10})
+		if node.Horizontal {
+			x += min(150, max(85, float64(len([]rune(choice.Label))*7+42)))
+		} else {
+			y += 25
+		}
+	}
 }
 
 func strokeFor(selected bool) float64 {

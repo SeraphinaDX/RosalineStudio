@@ -14,6 +14,9 @@ const (
 	eventClick        = "OnClick"
 	eventChange       = "OnChange"
 	eventSubmit       = "OnSubmit"
+	eventSelect       = "OnSelect"
+	eventActivate     = "OnActivate"
+	eventExpand       = "OnExpand"
 	eventOpen         = "OnOpen"
 	eventCloseRequest = "OnCloseRequest"
 	eventClose        = "OnClose"
@@ -55,6 +58,24 @@ func eventSpecsFor(kind widgetKind) []eventSpec {
 		}
 	case kindTextArea, kindCheckBox, kindComboBox, kindSlider:
 		return []eventSpec{{Name: eventChange, Description: "Runs after the value changes."}}
+	case kindRadioGroup:
+		return []eventSpec{{Name: eventChange, Description: "Runs after the selected radio choice changes."}}
+	case kindList:
+		return []eventSpec{
+			{Name: eventSelect, Description: "Runs after the selected list item changes."},
+			{Name: eventActivate, Description: "Runs when a list item is double-clicked or activated with Enter."},
+		}
+	case kindTable:
+		return []eventSpec{
+			{Name: eventSelect, Description: "Runs after the selected table row changes."},
+			{Name: eventActivate, Description: "Runs when a table row is double-clicked or activated with Enter."},
+		}
+	case kindTree:
+		return []eventSpec{
+			{Name: eventSelect, Description: "Runs after the selected tree node changes."},
+			{Name: eventActivate, Description: "Runs when a tree node is double-clicked or activated with Enter."},
+			{Name: eventExpand, Description: "Runs after a tree node is opened or closed."},
+		}
 	case kindTabs:
 		return []eventSpec{{Name: eventChange, Description: "Runs after the selected tab page changes."}}
 	default:
@@ -228,6 +249,16 @@ func defaultHandlerBody(node *designNode, event string) string {
 			label = defaultText(node.Text, string(node.Kind))
 		}
 		return fmt.Sprintf("rosaline.Message(%q, %q)", "Event", label+" clicked.")
+	}
+	if node != nil {
+		switch node.Kind {
+		case kindList:
+			return fmt.Sprintf("// Read the current item with app.Widgets().%s.Selected().\n// Add your response here.", node.Component)
+		case kindTable:
+			return fmt.Sprintf("// Read the current row with app.Widgets().%s.Selected().\n// Add your response here.", node.Component)
+		case kindTree:
+			return fmt.Sprintf("// Read the current node with app.Widgets().%s.Selected().\n// Add your response here.", node.Component)
+		}
 	}
 	if node != nil && node.Name != "" {
 		return fmt.Sprintf("// app.State.%s already contains the new value.\n// Use app.Widgets().%s to update this control.\n// Add your response here.", exportedIdentifier(node.Name), node.Component)

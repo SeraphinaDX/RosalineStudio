@@ -2,6 +2,23 @@
 
 All notable Rosaline Studio changes are documented here.
 
+## v0.7.0 - 2026-09-17
+
+- Add `List`, `Table`, `Tree`, and `RadioGroup` to the visual widget palette.
+- Add a multiline Data inspector with one consistent beginner-friendly syntax:
+  list items, labeled radio values, pipe-separated table cells, and slash-
+  separated tree paths.
+- Render representative list selection, table headings and rows, nested tree
+  paths, and vertical or horizontal radio choices in the form preview.
+- Generate typed Rosaline component references and normal `List`, `Table`,
+  `Tree`, `Node`, `RadioGroup`, and `Choice` calls.
+- Add `OnSelect` and `OnActivate` events for lists and tables, `OnSelect`,
+  `OnActivate`, and `OnExpand` for trees, and `OnChange` for radio groups.
+- Add a Project Browser example combining tabs, a tree, a table, a list, radio
+  choices, component access, and working event methods.
+- Advance the strict design schema to version 6 and automatically migrate
+  version-2 through version-5 designs.
+
 ## v0.6.0 - 2026-09-17
 
 - Add `Tabs` to the visual widget palette with General and Advanced starter

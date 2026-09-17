@@ -183,6 +183,97 @@ func TestGeneratorCreatesTabsPagesAndChangeEvent(t *testing.T) {
 	}
 }
 
+func TestGeneratorCreatesDataControlsAndEvents(t *testing.T) {
+	project := newProject()
+	root := project.mainForm().Root
+	root.Children = nil
+
+	list, err := project.addNear(root.ID, kindList)
+	if err != nil {
+		t.Fatal(err)
+	}
+	list.Component = "PaletteList"
+	list.Data = []string{"Rose", "Lavender"}
+	list.Events = map[string]string{eventSelect: "PaletteSelected", eventActivate: "PaletteActivated"}
+
+	table, err := project.addNear(root.ID, kindTable)
+	if err != nil {
+		t.Fatal(err)
+	}
+	table.Component = "ProjectTable"
+	table.Data = []string{"Name | Type", "Rosaline | Library", "Studio | Application"}
+	table.Events = map[string]string{eventSelect: "ProjectSelected"}
+
+	tree, err := project.addNear(root.ID, kindTree)
+	if err != nil {
+		t.Fatal(err)
+	}
+	tree.Component = "ProjectTree"
+	tree.Data = []string{"Project/Forms/MainForm", "Project/Assets"}
+	tree.Events = map[string]string{eventActivate: "TreeActivated", eventExpand: "TreeExpanded"}
+
+	radio, err := project.addNear(root.ID, kindRadioGroup)
+	if err != nil {
+		t.Fatal(err)
+	}
+	radio.Component = "ViewModeRadioGroup"
+	radio.Name = "ViewMode"
+	radio.Data = []string{"Automatic = auto", "Details = details"}
+	radio.Horizontal = true
+	radio.Events = map[string]string{eventChange: "ViewModeChanged"}
+
+	project.Handlers = map[string]string{
+		"PaletteSelected":  "// Selected.",
+		"PaletteActivated": "// Activated.",
+		"ProjectSelected":  "// Selected.",
+		"TreeActivated":    "// Activated.",
+		"TreeExpanded":     "// Expanded.",
+		"ViewModeChanged":  "// Changed.",
+	}
+
+	directory := t.TempDir()
+	if _, err := generateProject(project, directory); err != nil {
+		t.Fatal(err)
+	}
+	uiData, err := os.ReadFile(filepath.Join(directory, "ui_generated.go"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	stateData, err := os.ReadFile(filepath.Join(directory, "state_generated.go"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	ui := string(uiData)
+	state := string(stateData)
+	for _, want := range []string{
+		`rosaline.List("Rose", "Lavender").Expand().OnSelect(func(int, string) { app.PaletteSelected() }).OnActivate(func(int, string) { app.PaletteActivated() })`,
+		`rosaline.Table("Name", "Type").SetRows([]string{"Rosaline", "Library"}, []string{"Studio", "Application"}).Expand().OnSelect(func(int, []string) { app.ProjectSelected() })`,
+		`rosaline.Node("Forms"`,
+		`.WithValue("Project/Forms").Expanded()`,
+		`.OnActivate(func(*rosaline.TreeNode) { app.TreeActivated() }).OnExpand(func(*rosaline.TreeNode, bool) { app.TreeExpanded() })`,
+		`rosaline.RadioGroup(&app.State.ViewMode, rosaline.Choice("Automatic", "auto"), rosaline.Choice("Details", "details")).Horizontal().OnChange(func(string) { app.ViewModeChanged() })`,
+	} {
+		if !strings.Contains(ui, want) {
+			t.Fatalf("generated data controls are missing %q:\n%s", want, ui)
+		}
+	}
+	for _, want := range []string{
+		"PaletteList",
+		"*rosaline.ListWidget",
+		"ProjectTable",
+		"*rosaline.TableWidget",
+		"ProjectTree",
+		"*rosaline.TreeWidget",
+		"ViewModeRadioGroup",
+		"*rosaline.RadioGroupWidget",
+		"ViewMode string",
+	} {
+		if !strings.Contains(state, want) {
+			t.Fatalf("generated component state is missing %q:\n%s", want, state)
+		}
+	}
+}
+
 func TestGeneratorCreatesMultipleFormsAndLifecycleEvents(t *testing.T) {
 	project := newProject()
 	main := project.mainForm()

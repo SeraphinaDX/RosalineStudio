@@ -30,3 +30,19 @@ func TestUnusedBooleanHandlerRemainsValid(t *testing.T) {
 		t.Fatalf("unused boolean handler should remain editable: %v", err)
 	}
 }
+
+func TestDataControlsExposeTheirNativeEvents(t *testing.T) {
+	tests := map[widgetKind][]string{
+		kindList:       {eventSelect, eventActivate},
+		kindTable:      {eventSelect, eventActivate},
+		kindTree:       {eventSelect, eventActivate, eventExpand},
+		kindRadioGroup: {eventChange},
+	}
+	for kind, events := range tests {
+		for _, event := range events {
+			if !supportsEvent(kind, event) {
+				t.Fatalf("%s does not expose %s", kind, event)
+			}
+		}
+	}
+}

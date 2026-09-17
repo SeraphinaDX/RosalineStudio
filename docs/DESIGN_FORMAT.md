@@ -1,13 +1,13 @@
 # Rosaline design format
 
 Rosaline Studio stores visual projects as UTF-8 JSON files ending in
-`.rosaline`. The current schema version is `5`.
+`.rosaline`. The current schema version is `6`.
 
 ## Project fields
 
 | Field | Type | Meaning |
 |---|---|---|
-| `version` | integer | Design schema version; currently `5` |
+| `version` | integer | Design schema version; currently `6` |
 | `module` | string | Generated Go module path |
 | `forms` | form array | Primary form first, followed by reusable secondary forms |
 | `handlers` | object | Go event bodies keyed by handler method name |
@@ -62,6 +62,7 @@ Every widget has a globally unique internal `id`, a `kind`, and an exported Go
 | `asset` | images | Safe filename in the design's `.assets` folder |
 | `events` | interactive controls | Event names mapped to Go handler methods |
 | `options` | combo boxes | Available choices |
+| `data` | lists, tables, trees, radio groups | Designer data, one source line per array item |
 | `children` | layouts, Tabs, TabPage | Nested widgets or pages in display order |
 | `gap`, `padding` | layouts | Spacing in pixels |
 | `columns` | grid | Number of equal columns |
@@ -72,6 +73,7 @@ Every widget has a globally unique internal `id`, a `kind`, and an exported Go
 | `bold` | labels | Use bold text |
 | `password` | text boxes | Mask entered text |
 | `vertical` | sliders/progress | Use vertical orientation |
+| `horizontal` | radio groups | Arrange choices from left to right |
 
 Component names are exported Go identifiers such as `SaveButton`. They are
 available to event code through `app.Widgets().SaveButton`. Form names work the
@@ -123,11 +125,43 @@ may assign an `OnChange` handler.
 }
 ```
 
+## Data controls
+
+The `data` array uses a small line-oriented format chosen by `kind`:
+
+| Kind | Line format |
+|---|---|
+| `List` | One visible item per line |
+| `RadioGroup` | `Label = value`, or one string used for both |
+| `Table` | Cells separated by `|`; the first line contains headings |
+| `Tree` | A path separated by `/`; shared path segments become shared nodes |
+
+For example:
+
+```json
+{
+  "id": "node-7",
+  "kind": "Table",
+  "component": "ComponentTable",
+  "events": {"OnSelect": "ComponentSelected"},
+  "data": [
+    "Component | Kind | Status",
+    "MainLayout | Column | Ready",
+    "ProjectTree | Tree | Selected"
+  ],
+  "expand": true
+}
+```
+
+Lists and tables support `OnSelect` and `OnActivate`. Trees support
+`OnSelect`, `OnActivate`, and `OnExpand`. Radio groups bind a generated Go
+string named by `name` and support `OnChange`.
+
 ## Example
 
 ```json
 {
-  "version": 5,
+  "version": 6,
   "module": "example.com/greeting",
   "forms": [
     {
@@ -206,9 +240,9 @@ controls, and more than one child in a `Card` or `Scroll`. It validates event
 names, handler identifiers, handler return shape, and Go syntax. Widget moves
 stay within a form, while copy and paste can safely cross forms.
 
-Studio automatically migrates version-2 single-form and version-3 or version-4
-multi-form designs to version 5; save the file to keep the upgraded structure.
-Version-1 designs used a generic string action dispatcher and remain
-intentionally incompatible.
+Studio automatically migrates version-2 single-form and version-3 through
+version-5 multi-form designs to version 6; save the file to keep the upgraded
+structure. Version-1 designs used a generic string action dispatcher and
+remain intentionally incompatible.
 Commit important design files to Git before opening them in a newer Studio
 version.

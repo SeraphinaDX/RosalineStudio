@@ -14,7 +14,7 @@ import (
 	"unicode/utf8"
 )
 
-const designVersion = 5
+const designVersion = 6
 
 type widgetKind string
 
@@ -34,6 +34,10 @@ const (
 	kindTextArea    widgetKind = "TextArea"
 	kindCheckBox    widgetKind = "CheckBox"
 	kindComboBox    widgetKind = "ComboBox"
+	kindRadioGroup  widgetKind = "RadioGroup"
+	kindList        widgetKind = "List"
+	kindTable       widgetKind = "Table"
+	kindTree        widgetKind = "Tree"
 	kindSlider      widgetKind = "Slider"
 	kindProgressBar widgetKind = "ProgressBar"
 	kindSpacer      widgetKind = "Spacer"
@@ -47,6 +51,10 @@ var paletteKinds = []widgetKind{
 	kindTextArea,
 	kindCheckBox,
 	kindComboBox,
+	kindRadioGroup,
+	kindList,
+	kindTable,
+	kindTree,
 	kindSlider,
 	kindProgressBar,
 	kindSpacer,
@@ -60,28 +68,30 @@ var paletteKinds = []widgetKind{
 }
 
 type designNode struct {
-	ID        string            `json:"id"`
-	Kind      widgetKind        `json:"kind"`
-	Component string            `json:"component,omitempty"`
-	Text      string            `json:"text,omitempty"`
-	Name      string            `json:"name,omitempty"`
-	Asset     string            `json:"asset,omitempty"`
-	Events    map[string]string `json:"events,omitempty"`
-	Options   []string          `json:"options,omitempty"`
-	Children  []*designNode     `json:"children,omitempty"`
-	Gap       int               `json:"gap,omitempty"`
-	Padding   int               `json:"padding,omitempty"`
-	Columns   int               `json:"columns,omitempty"`
-	Width     int               `json:"width,omitempty"`
-	Height    int               `json:"height,omitempty"`
-	Minimum   float64           `json:"minimum,omitempty"`
-	Maximum   float64           `json:"maximum,omitempty"`
-	Step      float64           `json:"step,omitempty"`
-	Expand    bool              `json:"expand,omitempty"`
-	Primary   bool              `json:"primary,omitempty"`
-	Bold      bool              `json:"bold,omitempty"`
-	Password  bool              `json:"password,omitempty"`
-	Vertical  bool              `json:"vertical,omitempty"`
+	ID         string            `json:"id"`
+	Kind       widgetKind        `json:"kind"`
+	Component  string            `json:"component,omitempty"`
+	Text       string            `json:"text,omitempty"`
+	Name       string            `json:"name,omitempty"`
+	Asset      string            `json:"asset,omitempty"`
+	Events     map[string]string `json:"events,omitempty"`
+	Options    []string          `json:"options,omitempty"`
+	Data       []string          `json:"data,omitempty"`
+	Children   []*designNode     `json:"children,omitempty"`
+	Gap        int               `json:"gap,omitempty"`
+	Padding    int               `json:"padding,omitempty"`
+	Columns    int               `json:"columns,omitempty"`
+	Width      int               `json:"width,omitempty"`
+	Height     int               `json:"height,omitempty"`
+	Minimum    float64           `json:"minimum,omitempty"`
+	Maximum    float64           `json:"maximum,omitempty"`
+	Step       float64           `json:"step,omitempty"`
+	Expand     bool              `json:"expand,omitempty"`
+	Primary    bool              `json:"primary,omitempty"`
+	Bold       bool              `json:"bold,omitempty"`
+	Password   bool              `json:"password,omitempty"`
+	Vertical   bool              `json:"vertical,omitempty"`
+	Horizontal bool              `json:"horizontal,omitempty"`
 }
 
 type designProject struct {
@@ -224,6 +234,18 @@ func defaultNode(kind widgetKind, id string) *designNode {
 	case kindComboBox:
 		node.Name = "Choice"
 		node.Options = []string{"One", "Two", "Three"}
+	case kindRadioGroup:
+		node.Name = "DisplayMode"
+		node.Data = []string{"Automatic = auto", "Light = light", "Dark = dark"}
+	case kindList:
+		node.Data = []string{"Rose", "Lavender", "Midnight"}
+		node.Expand = true
+	case kindTable:
+		node.Data = []string{"Name | Type | Status", "Rosaline | Library | Ready", "Studio | Application | Editing"}
+		node.Expand = true
+	case kindTree:
+		node.Data = []string{"Project", "Project/Forms", "Project/Forms/MainForm", "Project/Assets", "Dependencies"}
+		node.Expand = true
 	case kindSlider:
 		node.Name = "Value"
 		node.Maximum = 100
@@ -456,6 +478,7 @@ func cloneDesignNode(node *designNode) *designNode {
 	}
 	clone := *node
 	clone.Options = append([]string(nil), node.Options...)
+	clone.Data = append([]string(nil), node.Data...)
 	clone.Children = make([]*designNode, 0, len(node.Children))
 	clone.Events = cloneStringMap(node.Events)
 	for _, child := range node.Children {
@@ -1039,7 +1062,7 @@ func loadDesign(path string) (*designProject, error) {
 			}},
 			Handlers: legacy.Handlers,
 		}
-	case 3, 4, designVersion:
+	case 3, 4, 5, designVersion:
 		if err := decodeStrict(data, &project); err != nil {
 			return nil, err
 		}

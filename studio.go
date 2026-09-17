@@ -18,24 +18,26 @@ import (
 )
 
 type inspectorState struct {
-	Component string
-	Text      string
-	Name      string
-	Asset     string
-	Options   string
-	Gap       string
-	Padding   string
-	Columns   string
-	Width     string
-	Height    string
-	Minimum   string
-	Maximum   string
-	Step      string
-	Expand    bool
-	Primary   bool
-	Bold      bool
-	Password  bool
-	Vertical  bool
+	Component  string
+	Text       string
+	Name       string
+	Asset      string
+	Options    string
+	Data       string
+	Gap        string
+	Padding    string
+	Columns    string
+	Width      string
+	Height     string
+	Minimum    string
+	Maximum    string
+	Step       string
+	Expand     bool
+	Primary    bool
+	Bold       bool
+	Password   bool
+	Vertical   bool
+	Horizontal bool
 }
 
 type projectInspectorState struct {
@@ -520,7 +522,20 @@ func (studio *studio) buildInspectorPanel() rosaline.Widget {
 		rosaline.CheckBox("Bold label", &studio.inspector.Bold),
 		rosaline.CheckBox("Password input", &studio.inspector.Password),
 		rosaline.CheckBox("Vertical slider or progress", &studio.inspector.Vertical),
+		rosaline.CheckBox("Horizontal radio choices", &studio.inspector.Horizontal),
 	).Gap(8)
+
+	dataProperties := rosaline.Column(
+		rosaline.LabelFunc(func() string {
+			node := studio.project.find(studio.selectedID)
+			if node == nil {
+				return dataHelp("")
+			}
+			return dataHelp(node.Kind)
+		}).Color(rosaline.DefaultTheme.Muted),
+		rosaline.TextArea(&studio.inspector.Data).Size(25, 12).Expand(),
+		rosaline.Label("Choose Apply Properties after editing data.").Color(rosaline.DefaultTheme.Muted),
+	).Gap(8).Expand()
 
 	widgetPanel := rosaline.Column(
 		rosaline.LabelFunc(func() string { return previewDescription(studio.project.find(studio.selectedID)) }).Bold(),
@@ -528,6 +543,7 @@ func (studio *studio) buildInspectorPanel() rosaline.Widget {
 			rosaline.Tab("Content", contentProperties),
 			rosaline.Tab("Layout", layoutProperties),
 			rosaline.Tab("Style", styleProperties),
+			rosaline.Tab("Data", dataProperties),
 		).Expand(),
 		compactInspectorWidget(rosaline.Button("Apply Properties", studio.applyInspector).Primary()),
 		rosaline.Label("Unsupported properties are ignored.").Color(rosaline.DefaultTheme.Muted),
@@ -1180,6 +1196,11 @@ func (studio *studio) applyInspector() {
 	node.Text = studio.inspector.Text
 	node.Name = studio.inspector.Name
 	node.Options = splitOptions(studio.inspector.Options)
+	if dataKind(node.Kind) {
+		node.Data = dataLines(studio.inspector.Data)
+	} else {
+		node.Data = nil
+	}
 	node.Gap = parseInteger(studio.inspector.Gap, node.Gap)
 	node.Padding = parseInteger(studio.inspector.Padding, node.Padding)
 	node.Columns = max(1, parseInteger(studio.inspector.Columns, node.Columns))
@@ -1193,6 +1214,7 @@ func (studio *studio) applyInspector() {
 	node.Bold = studio.inspector.Bold
 	node.Password = studio.inspector.Password
 	node.Vertical = studio.inspector.Vertical
+	node.Horizontal = studio.inspector.Horizontal
 	studio.commitChange(before, "Updated "+string(node.Kind))
 }
 
@@ -1412,11 +1434,12 @@ func (studio *studio) loadInspector() {
 	studio.inspector = inspectorState{
 		Component: node.Component, Text: node.Text, Name: node.Name, Asset: node.Asset,
 		Options: strings.Join(node.Options, ", "),
+		Data:    strings.Join(node.Data, "\n"),
 		Gap:     strconv.Itoa(node.Gap), Padding: strconv.Itoa(node.Padding),
 		Columns: strconv.Itoa(max(1, node.Columns)), Width: strconv.Itoa(node.Width), Height: strconv.Itoa(node.Height),
 		Minimum: numberLiteral(node.Minimum), Maximum: numberLiteral(node.Maximum), Step: numberLiteral(node.Step),
 		Expand: node.Expand, Primary: node.Primary, Bold: node.Bold,
-		Password: node.Password, Vertical: node.Vertical,
+		Password: node.Password, Vertical: node.Vertical, Horizontal: node.Horizontal,
 	}
 }
 
@@ -1630,7 +1653,7 @@ func (studio *studio) documentName() string {
 func (studio *studio) showHelp() {
 	rosaline.Message(
 		"Rosaline Studio Quick Help",
-		"1. Select or create a form in Project Forms.\n2. Select a container and double-click a palette item to add it.\n3. Give controls memorable component names in Properties.\n4. Right-click to cut, copy, paste, duplicate, or delete widgets.\n5. Add Tabs, click a page header, and manage pages in the Pages inspector.\n6. Use Events to assign a handler, or double-click a form control.\n7. Open Menus to build the form's menu bar and edit item click handlers.\n8. Select a form's root layout to edit OnOpen, OnCloseRequest, and OnClose.\n9. Write event code with app.Widgets().Name and app.Windows().FormName.\n10. Press F5 to generate and run.\n\nStudio never overwrites handlers.go, main.go, go.mod, or README.md.",
+		"1. Select or create a form in Project Forms.\n2. Select a container and double-click a palette item to add it.\n3. Give controls memorable component names in Properties.\n4. Right-click to cut, copy, paste, duplicate, or delete widgets.\n5. Add Tabs, click a page header, and manage pages in the Pages inspector.\n6. Edit List, Table, Tree, or RadioGroup content under Properties > Data.\n7. Use Events to assign a handler, or double-click a form control.\n8. Open Menus to build the form's menu bar and edit item click handlers.\n9. Select a form's root layout to edit OnOpen, OnCloseRequest, and OnClose.\n10. Write event code with app.Widgets().Name and app.Windows().FormName.\n11. Press F5 to generate and run.\n\nStudio never overwrites handlers.go, main.go, go.mod, or README.md.",
 	)
 	studio.canvas.Focus()
 }
@@ -1638,7 +1661,7 @@ func (studio *studio) showHelp() {
 func (studio *studio) showAbout() {
 	rosaline.Message(
 		"About Rosaline Studio",
-		"Rosaline Studio v0.6.0\n\nA pure-Go Lazarus-style RAD environment built with Rosaline.\n\nGenerated code remains normal, readable Rosaline Go.",
+		"Rosaline Studio v0.7.0\n\nA pure-Go Lazarus-style RAD environment built with Rosaline.\n\nGenerated code remains normal, readable Rosaline Go.",
 	)
 	studio.canvas.Focus()
 }

@@ -229,6 +229,14 @@ func widgetType(kind widgetKind) string {
 		return "*rosaline.CheckBoxWidget"
 	case kindComboBox:
 		return "*rosaline.ComboBoxWidget"
+	case kindRadioGroup:
+		return "*rosaline.RadioGroupWidget"
+	case kindList:
+		return "*rosaline.ListWidget"
+	case kindTable:
+		return "*rosaline.TableWidget"
+	case kindTree:
+		return "*rosaline.TreeWidget"
 	case kindSlider:
 		return "*rosaline.SliderWidget"
 	case kindProgressBar:
@@ -240,7 +248,7 @@ func widgetType(kind widgetKind) string {
 
 func stateType(kind widgetKind) string {
 	switch kind {
-	case kindTextBox, kindTextArea, kindComboBox:
+	case kindTextBox, kindTextArea, kindComboBox, kindRadioGroup:
 		return "string"
 	case kindCheckBox:
 		return "bool"
@@ -740,6 +748,72 @@ func generateNode(node *designNode, context *generationContext, depth int) strin
 		}
 		expression += ")"
 		expression += generatedEventModifier(node, eventChange, "string")
+	case kindRadioGroup:
+		field := context.fieldsByID[node.ID]
+		choices := make([]string, 0)
+		for _, choice := range parseRadioData(node.Data) {
+			choices = append(choices, fmt.Sprintf("rosaline.Choice(%q, %q)", choice.Label, choice.Value))
+		}
+		expression = fmt.Sprintf("rosaline.RadioGroup(&app.State.%s", field.Name)
+		if len(choices) != 0 {
+			expression += ", " + strings.Join(choices, ", ")
+		}
+		expression += ")"
+		if node.Horizontal {
+			expression += ".Horizontal()"
+		}
+		expression += generatedEventModifier(node, eventChange, "string")
+	case kindList:
+		items := make([]string, 0, len(node.Data))
+		for _, item := range node.Data {
+			items = append(items, strconv.Quote(item))
+		}
+		expression = "rosaline.List(" + strings.Join(items, ", ") + ")"
+		if node.Expand {
+			expression += ".Expand()"
+		}
+		expression += generatedEventModifier(node, eventSelect, "int, string")
+		expression += generatedEventModifier(node, eventActivate, "int, string")
+	case kindTable:
+		columns, rows := parseTableData(node.Data)
+		quoted := make([]string, 0, len(columns))
+		for _, column := range columns {
+			quoted = append(quoted, strconv.Quote(column))
+		}
+		expression = "rosaline.Table(" + strings.Join(quoted, ", ") + ")"
+		if len(rows) != 0 {
+			generatedRows := make([]string, 0, len(rows))
+			for _, row := range rows {
+				cells := make([]string, 0, len(row))
+				for _, cell := range row {
+					cells = append(cells, strconv.Quote(cell))
+				}
+				generatedRows = append(generatedRows, "[]string{"+strings.Join(cells, ", ")+"}")
+			}
+			expression += ".SetRows(" + strings.Join(generatedRows, ", ") + ")"
+		}
+		if node.Expand {
+			expression += ".Expand()"
+		}
+		expression += generatedEventModifier(node, eventSelect, "int, []string")
+		expression += generatedEventModifier(node, eventActivate, "int, []string")
+	case kindTree:
+		items := parseTreeData(node.Data)
+		generated := make([]string, 0, len(items))
+		for _, item := range items {
+			generated = append(generated, generateTreeDataItem(item, depth+1))
+		}
+		expression = "rosaline.Tree("
+		if len(generated) != 0 {
+			expression += "\n" + childIndent + strings.Join(generated, ",\n"+childIndent) + ",\n" + indent
+		}
+		expression += ")"
+		if node.Expand {
+			expression += ".Expand()"
+		}
+		expression += generatedEventModifier(node, eventSelect, "*rosaline.TreeNode")
+		expression += generatedEventModifier(node, eventActivate, "*rosaline.TreeNode")
+		expression += generatedEventModifier(node, eventExpand, "*rosaline.TreeNode, bool")
 	case kindSlider:
 		field := context.fieldsByID[node.ID]
 		minimum, maximum := node.Minimum, node.Maximum
@@ -804,6 +878,27 @@ func generateTabPage(page *designNode, context *generationContext, depth int) st
 		title = "Page"
 	}
 	return fmt.Sprintf("rosaline.Tab(%q, %s)", title, content.String())
+}
+
+func generateTreeDataItem(item *treeDataItem, depth int) string {
+	if item == nil {
+		return `rosaline.Node("Item")`
+	}
+	indent := strings.Repeat("\t", depth)
+	childIndent := strings.Repeat("\t", depth+1)
+	result := fmt.Sprintf("rosaline.Node(%q", item.Label)
+	if len(item.Children) != 0 {
+		children := make([]string, 0, len(item.Children))
+		for _, child := range item.Children {
+			children = append(children, generateTreeDataItem(child, depth+1))
+		}
+		result += ",\n" + childIndent + strings.Join(children, ",\n"+childIndent) + ",\n" + indent
+	}
+	result += fmt.Sprintf(").WithValue(%q)", item.Value)
+	if len(item.Children) != 0 {
+		result += ".Expanded()"
+	}
+	return result
 }
 
 func generatedEventModifier(node *designNode, event, valueType string) string {
