@@ -470,6 +470,21 @@ func TestDataBrowserExampleLoadsAndGenerates(t *testing.T) {
 	parseGeneratedGo(t, directory)
 }
 
+func TestComponentsExampleLoadsAndGenerates(t *testing.T) {
+	project, err := loadDesign(filepath.Join("examples", "components.rosaline"))
+	if err != nil {
+		t.Fatalf("load components example: %v", err)
+	}
+	if len(project.mainForm().Components) != 3 {
+		t.Fatalf("components example is incomplete: %#v", project.mainForm().Components)
+	}
+	directory := t.TempDir()
+	if _, err := generateProject(project, directory); err != nil {
+		t.Fatalf("generate components example: %v", err)
+	}
+	parseGeneratedGo(t, directory)
+}
+
 func TestNewNestedLayoutsUseNaturalSize(t *testing.T) {
 	for _, kind := range []widgetKind{kindColumn, kindRow, kindGrid, kindStack} {
 		if node := defaultNode(kind, "test"); node.Expand {

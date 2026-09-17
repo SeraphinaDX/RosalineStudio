@@ -606,6 +606,20 @@ func TestGeneratedApplicationBuilds(t *testing.T) {
 		{ID: "tool-1", Kind: toolbarItemAction, Action: action.ID},
 		{ID: "tool-2", Kind: toolbarItemSeparator},
 	}
+	timer, err := project.addComponent(project.mainForm(), componentTimer)
+	if err != nil {
+		t.Fatal(err)
+	}
+	project.Handlers[timer.Handler] = "// Timer fired."
+	openDialog, err := project.addComponent(project.mainForm(), componentOpenDialog)
+	if err != nil {
+		t.Fatal(err)
+	}
+	openDialog.Filters = []string{"Go source | .go", "All files | *"}
+	project.Handlers["RunClick"] = "_, _ = app.Components().OpenDialog.Execute()\napp.Components().Timer.Stop()"
+	if _, err := project.addComponent(secondary, componentSaveDialog); err != nil {
+		t.Fatal(err)
+	}
 	for _, kind := range paletteKinds {
 		if _, err := project.addNear(project.mainForm().Root.ID, kind); err != nil {
 			t.Fatalf("add %s: %v", kind, err)

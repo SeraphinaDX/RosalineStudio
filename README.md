@@ -10,7 +10,7 @@ Rosaline Studio is itself a pure-Go Rosaline application. It builds with
 
 ![Screenshot](rosaline-studio.avif)
 
-## What v0.8.0 can do
+## What v0.9.0 can do
 
 - Design a primary form and any number of reusable secondary forms
 - Create, duplicate, rename, select, configure, and delete forms from the
@@ -28,6 +28,13 @@ Rosaline Studio is itself a pure-Go Rosaline application. It builds with
 - Define Lazarus-style project actions that share one caption, shortcut, and
   execute handler across menus and toolbars
 - Build an ordered toolbar for each form from shared actions and separators
+- Add form-owned Timer, Open File Dialog, and Save File Dialog components in a
+  dedicated Lazarus-style Components designer
+- Configure timer intervals, repetition, automatic startup, and tick handlers
+- Configure native file-dialog titles, starting paths, filenames, extensions,
+  and friendly filters
+- Control nonvisual components from event code through typed
+  `app.Components()` references
 - Add tabbed interfaces from the palette with friendly page containers
 - Add, rename, duplicate, reorder, select, and delete pages in the Pages inspector
 - Switch designed pages directly in the form preview
@@ -200,6 +207,28 @@ row of buttons and separators. See
 [Shared actions and visual toolbars](docs/ACTIONS_TOOLBARS.md) and open the
 updated [`examples/notepad.rosaline`](examples/notepad.rosaline).
 
+## Nonvisual components
+
+Open the center **Components** tab or choose **Project > Nonvisual
+Components**. Add a Timer, Open File Dialog, or Save File Dialog to the active
+form. The compact tray below the form preview shows these behavioral components
+without pretending that they are visual widgets.
+
+Timers can repeat or fire once, start with their form or remain stopped, and
+open their tick method directly in Studio's Go editor. File dialogs share one
+simple call from any event:
+
+```go
+path, ok := app.Components().OpenDocumentDialog.Execute()
+if ok {
+	app.Widgets().StatusLabel.SetText(path)
+}
+```
+
+See [Nonvisual components](docs/NONVISUAL_COMPONENTS.md) and open
+[`examples/components.rosaline`](examples/components.rosaline) for a complete
+timer and file-dialog application.
+
 ## Supported designer widgets
 
 Layouts: `Column`, `Row`, `Grid`, `Stack`, `Card`, `Scroll`, and `Tabs` with
@@ -209,9 +238,9 @@ Controls: `Label`, `Image`, `Button`, `TextBox`, `TextArea`, `CheckBox`,
 `ComboBox`, `RadioGroup`, `List`, `Table`, `Tree`, `Slider`, `ProgressBar`, and
 `Spacer`.
 
-Rosaline has more features than the current palette. Dialogs, canvases, timers,
-and custom widgets can already be added by hand
-to the generated project and are candidates for later Studio releases.
+Rosaline has more features than the current palette. Canvases and custom
+widgets can already be added by hand to the generated project and are
+candidates for later Studio releases.
 
 ## Design file
 
@@ -236,11 +265,11 @@ env CGO_ENABLED=0 ROSALINE_SOURCE=../Rosaline go test ./...
 
 ## Project status
 
-Rosaline Studio v0.8.0 is an intentionally small early release. Generated code
+Rosaline Studio v0.9.0 is an intentionally small early release. Generated code
 and saved designs are designed to stay understandable while the visual tooling
 grows. The design schema is versioned, but the Studio API and file format remain
 experimental until v1.0. Studio automatically migrates version-2 through
-version-6 designs to version 7; version-1 designs remain intentionally
+version-7 designs to version 8; version-1 designs remain intentionally
 incompatible.
 
 ## License

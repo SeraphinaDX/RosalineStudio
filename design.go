@@ -14,7 +14,7 @@ import (
 	"unicode/utf8"
 )
 
-const designVersion = 7
+const designVersion = 8
 
 type widgetKind string
 
@@ -103,17 +103,18 @@ type designProject struct {
 }
 
 type designForm struct {
-	ID      string               `json:"id"`
-	Name    string               `json:"name"`
-	Title   string               `json:"title"`
-	Width   int                  `json:"width"`
-	Height  int                  `json:"height"`
-	Padding int                  `json:"padding"`
-	Theme   string               `json:"theme"`
-	Root    *designNode          `json:"root"`
-	Events  map[string]string    `json:"events,omitempty"`
-	Menus   []*designMenu        `json:"menus,omitempty"`
-	Toolbar []*designToolbarItem `json:"toolbar,omitempty"`
+	ID         string               `json:"id"`
+	Name       string               `json:"name"`
+	Title      string               `json:"title"`
+	Width      int                  `json:"width"`
+	Height     int                  `json:"height"`
+	Padding    int                  `json:"padding"`
+	Theme      string               `json:"theme"`
+	Root       *designNode          `json:"root"`
+	Events     map[string]string    `json:"events,omitempty"`
+	Menus      []*designMenu        `json:"menus,omitempty"`
+	Toolbar    []*designToolbarItem `json:"toolbar,omitempty"`
+	Components []*designComponent   `json:"components,omitempty"`
 }
 
 type legacyDesignProject struct {
@@ -442,9 +443,11 @@ func (project *designProject) duplicateForm(id string) (*designForm, error) {
 	clone.Events = cloneStringMap(source.Events)
 	clone.Menus = cloneDesignMenus(source.Menus)
 	clone.Toolbar = cloneDesignToolbar(source.Toolbar)
+	clone.Components = cloneDesignComponents(source.Components)
 	project.prepareCopiedSubtree(clone.Root)
 	project.prepareCopiedMenus(clone.Menus)
 	project.prepareCopiedToolbar(clone.Toolbar)
+	project.prepareCopiedComponents(clone.Components)
 	project.Forms = append(project.Forms, &clone)
 	return &clone, nil
 }
@@ -915,6 +918,7 @@ func (project *designProject) validate() error {
 	components := make(map[string]bool)
 	formIDs := make(map[string]bool)
 	formNames := make(map[string]bool)
+	componentNames := make(map[string]bool)
 	actions, err := validateDesignActions(project, seen)
 	if err != nil {
 		return err
@@ -1008,6 +1012,9 @@ func (project *designProject) validate() error {
 		if err := validateDesignToolbar(form, actions, seen); err != nil {
 			return fmt.Errorf("form %s toolbar: %w", form.Name, err)
 		}
+		if err := validateDesignComponents(form, seen, componentNames); err != nil {
+			return fmt.Errorf("form %s components: %w", form.Name, err)
+		}
 		if err := visit(form.Root, nil); err != nil {
 			return err
 		}
@@ -1073,7 +1080,7 @@ func loadDesign(path string) (*designProject, error) {
 			}},
 			Handlers: legacy.Handlers,
 		}
-	case 3, 4, 5, 6, designVersion:
+	case 3, 4, 5, 6, 7, designVersion:
 		if err := decodeStrict(data, &project); err != nil {
 			return nil, err
 		}
