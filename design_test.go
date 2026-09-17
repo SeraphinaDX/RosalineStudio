@@ -13,6 +13,12 @@ import (
 func TestDesignRoundTrip(t *testing.T) {
 	project := newProject()
 	project.mainForm().Title = "Round trip"
+	action := project.addAction()
+	action.Name, action.Text, action.Shortcut = "SaveAction", "Save", "Primary+S"
+	project.mainForm().Toolbar = []*designToolbarItem{
+		{ID: "tool-1", Kind: toolbarItemAction, Action: action.ID},
+		{ID: "tool-2", Kind: toolbarItemSeparator},
+	}
 	radio, err := project.addNear(project.mainForm().Root.ID, kindRadioGroup)
 	if err != nil {
 		t.Fatal(err)
@@ -21,7 +27,7 @@ func TestDesignRoundTrip(t *testing.T) {
 	radio.Horizontal = true
 	project.mainForm().Menus = []*designMenu{{
 		ID: "menu-1", Kind: menuKindMenu, Text: "File",
-		Children: []*designMenu{{ID: "menu-2", Kind: menuKindItem, Text: "Save", Handler: "ContinueClick", Shortcut: "Primary+S"}},
+		Children: []*designMenu{{ID: "menu-2", Kind: menuKindItem, Action: action.ID, Text: "Save"}},
 	}}
 	path := filepath.Join(t.TempDir(), "nested", "app.rosaline")
 	if err := saveDesign(path, project); err != nil {
@@ -33,6 +39,73 @@ func TestDesignRoundTrip(t *testing.T) {
 	}
 	if !reflect.DeepEqual(project, loaded) {
 		t.Fatalf("loaded design differs\nwant: %#v\n got: %#v", project, loaded)
+	}
+}
+
+func TestActionsCanBeSharedAndRemovedSafely(t *testing.T) {
+	project := newProject()
+	action := project.addAction()
+	action.Name, action.Text = "SaveAction", "Save"
+	form := project.mainForm()
+	form.Menus = []*designMenu{{
+		ID: "menu-1", Kind: menuKindMenu, Text: "File",
+		Children: []*designMenu{{ID: "menu-2", Kind: menuKindItem, Action: action.ID, Text: "Save fallback"}},
+	}}
+	item, err := project.addToolbarAction(form, action.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := project.validate(); err != nil {
+		t.Fatalf("shared action design is invalid: %v", err)
+	}
+	if err := project.removeAction(action.ID); err != nil {
+		t.Fatal(err)
+	}
+	if findDesignMenu(form.Menus, "menu-2").Action != "" {
+		t.Fatal("deleted action remained linked to a menu item")
+	}
+	if findToolbarItem(form, item.ID) != nil {
+		t.Fatal("deleted action remained on a toolbar")
+	}
+	if err := project.validate(); err != nil {
+		t.Fatalf("design was invalid after removing action: %v", err)
+	}
+}
+
+func TestNewActionDoesNotOverwriteExistingHandler(t *testing.T) {
+	project := newProject()
+	project.Handlers["ActionExecute"] = "// Developer behavior."
+	action := project.addAction()
+	if action.Handler == "ActionExecute" {
+		t.Fatal("new action reused an existing handler name")
+	}
+	if project.Handlers["ActionExecute"] != "// Developer behavior." {
+		t.Fatal("new action overwrote existing handler code")
+	}
+}
+
+func TestDuplicateFormGetsIndependentToolbarItemIDs(t *testing.T) {
+	project := newProject()
+	action := project.addAction()
+	form := project.mainForm()
+	if _, err := project.addToolbarAction(form, action.ID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := project.addToolbarSeparator(form); err != nil {
+		t.Fatal(err)
+	}
+	copy, err := project.duplicateForm(form.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(copy.Toolbar) != 2 || copy.Toolbar[0].ID == form.Toolbar[0].ID || copy.Toolbar[1].ID == form.Toolbar[1].ID || copy.Toolbar[0].ID == copy.Toolbar[1].ID {
+		t.Fatalf("duplicated toolbar retained IDs: %#v", copy.Toolbar)
+	}
+	if copy.Toolbar[0].Action != action.ID {
+		t.Fatal("duplicated toolbar did not retain the shared action")
+	}
+	if err := project.validate(); err != nil {
+		t.Fatalf("duplicated form is invalid: %v", err)
 	}
 }
 
@@ -208,6 +281,21 @@ func TestVersionFiveDesignIsUpgraded(t *testing.T) {
 	}
 	if project.Version != designVersion {
 		t.Fatalf("version-5 design was not migrated: %#v", project)
+	}
+}
+
+func TestVersionSixDesignIsUpgraded(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "old-v6.rosaline")
+	data := []byte(`{"version":6,"module":"example.com/old","forms":[{"id":"form-1","name":"MainForm","title":"Old","width":720,"height":520,"padding":16,"theme":"Rosaline","root":{"id":"root","kind":"Column","component":"MainLayout"}}]}`)
+	if err := os.WriteFile(path, data, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	project, err := loadDesign(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if project.Version != designVersion || len(project.Actions) != 0 || len(project.mainForm().Toolbar) != 0 {
+		t.Fatalf("version-6 design was not migrated: %#v", project)
 	}
 }
 

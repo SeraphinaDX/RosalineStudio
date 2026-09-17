@@ -45,13 +45,23 @@ func (studio *studio) selectMenu(id string) {
 func (studio *studio) loadMenuInspector() {
 	menu := studio.selectedMenu()
 	if menu == nil {
-		studio.menu = menuInspectorState{}
+		studio.menu = menuInspectorState{Action: noSharedAction}
+		if studio.menuActionChoice != nil {
+			studio.menuActionChoice.Select(noSharedAction)
+		}
 		return
 	}
 	studio.menu = menuInspectorState{
+		Action:   noSharedAction,
 		Caption:  menu.Text,
 		Shortcut: menu.Shortcut,
 		Handler:  menu.Handler,
+	}
+	if action := studio.project.action(menu.Action); action != nil {
+		studio.menu.Action = action.Name
+	}
+	if studio.menuActionChoice != nil {
+		studio.menuActionChoice.Select(studio.menu.Action)
 	}
 }
 
@@ -62,6 +72,9 @@ func (studio *studio) selectedMenuLabel() string {
 	}
 	if menu.Kind == menuKindSeparator {
 		return "Separator"
+	}
+	if action := studio.project.action(menu.Action); action != nil {
+		return string(menu.Kind) + " - " + action.Text + "  [" + action.Name + "]"
 	}
 	return string(menu.Kind) + " - " + menu.Text
 }
@@ -85,12 +98,19 @@ func (studio *studio) rebuildMenuTree() {
 		case menuKindSeparator:
 			label = "──────── Separator"
 		default:
-			label += " - " + menu.Text
-			if menu.Shortcut != "" {
-				label += "  [" + menu.Shortcut + "]"
+			text, handler, shortcut := menu.Text, menu.Handler, menu.Shortcut
+			if action := studio.project.action(menu.Action); action != nil {
+				text, handler, shortcut = action.Text, action.Handler, action.Shortcut
 			}
-			if menu.Handler != "" {
-				label += "  → " + menu.Handler
+			label += " - " + text
+			if shortcut != "" {
+				label += "  [" + shortcut + "]"
+			}
+			if handler != "" {
+				label += "  → " + handler
+			}
+			if menu.Action != "" {
+				label += "  {shared}"
 			}
 		}
 		result := rosaline.Node(label, children...).WithValue(menu.ID).Expanded()
@@ -212,9 +232,20 @@ func (studio *studio) applyMenuInspector() {
 			return
 		}
 		menu.Text = caption
+		menu.Action = ""
 		menu.Handler = ""
 		menu.Shortcut = ""
 	case menuKindItem:
+		actionID := studio.menuActionID(studio.menu.Action)
+		if studio.menu.Action != "" && studio.menu.Action != noSharedAction && actionID == "" {
+			studio.status = "Choose an existing shared action"
+			return
+		}
+		if actionID != "" {
+			menu.Action = actionID
+			studio.commitChange(before, "Linked menu item to shared action")
+			return
+		}
 		caption := strings.TrimSpace(studio.menu.Caption)
 		handler := strings.TrimSpace(studio.menu.Handler)
 		shortcut := strings.TrimSpace(studio.menu.Shortcut)
@@ -230,6 +261,7 @@ func (studio *studio) applyMenuInspector() {
 			studio.status = err.Error()
 			return
 		}
+		menu.Action = ""
 		menu.Text, menu.Handler, menu.Shortcut = caption, handler, shortcut
 	case menuKindSeparator:
 		studio.status = "Separators have no editable properties"
@@ -242,6 +274,12 @@ func (studio *studio) editMenuHandler() {
 	menu := studio.selectedMenu()
 	if menu == nil || menu.Kind != menuKindItem {
 		studio.status = "Select a menu item to edit its click event"
+		return
+	}
+	if action := studio.project.action(menu.Action); action != nil {
+		studio.actionID = action.ID
+		studio.loadActionInspector()
+		studio.editActionHandler()
 		return
 	}
 	handler := strings.TrimSpace(studio.menu.Handler)
@@ -294,6 +332,10 @@ func (studio *studio) clearMenuHandler() {
 	menu := studio.selectedMenu()
 	if menu == nil || menu.Kind != menuKindItem {
 		studio.status = "Select a menu item first"
+		return
+	}
+	if menu.Action != "" {
+		studio.status = "This item uses a shared action; edit or unlink the action instead"
 		return
 	}
 	if menu.Handler == "" {

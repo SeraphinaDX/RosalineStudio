@@ -2,6 +2,23 @@
 
 All notable Rosaline Studio changes are documented here.
 
+## v0.8.0 - 2026-09-17
+
+- Add Lazarus-style project actions with one reusable name, caption, shortcut,
+  and Go execute handler.
+- Add a visual Actions designer for creating, duplicating, deleting, editing,
+  and opening shared action code.
+- Add a per-form visual Toolbar designer with action buttons, separators,
+  ordering, removal, preview rendering, and undo/redo support.
+- Let menu items link to shared actions so menu and toolbar commands use the
+  same caption, shortcut, and handler without duplicated setup.
+- Generate readable toolbars from ordinary Rosaline rows, buttons, cards, and
+  vertical separators without requiring a new Rosaline release.
+- Upgrade the Notepad example to share New, Undo, Redo, Cut, Copy, Paste, Quit,
+  and About actions between menus and its toolbar.
+- Advance the strict design schema to version 7 and automatically migrate
+  version-2 through version-6 designs.
+
 ## v0.7.0 - 2026-09-17
 
 - Add `List`, `Table`, `Tree`, and `RadioGroup` to the visual widget palette.

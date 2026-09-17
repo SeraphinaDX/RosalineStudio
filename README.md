@@ -10,7 +10,7 @@ Rosaline Studio is itself a pure-Go Rosaline application. It builds with
 
 ![Screenshot](rosaline-studio.avif)
 
-## What v0.7.0 can do
+## What v0.8.0 can do
 
 - Design a primary form and any number of reusable secondary forms
 - Create, duplicate, rename, select, configure, and delete forms from the
@@ -25,6 +25,9 @@ Rosaline Studio is itself a pure-Go Rosaline application. It builds with
 - Switch between Lazarus-style Form and Code views
 - Build complete menu bars in a dedicated visual Menu Designer
 - Add menu items, separators, nested submenus, shortcuts, and click handlers
+- Define Lazarus-style project actions that share one caption, shortcut, and
+  execute handler across menus and toolbars
+- Build an ordered toolbar for each form from shared actions and separators
 - Add tabbed interfaces from the palette with friendly page containers
 - Add, rename, duplicate, reorder, select, and delete pages in the Pages inspector
 - Switch designed pages directly in the form preview
@@ -184,6 +187,19 @@ menu handlers in `events_generated.go`. See
 [Designing menus](docs/MENU_DESIGNER.md) and open
 [`examples/notepad.rosaline`](examples/notepad.rosaline) for a complete app.
 
+## Shared actions and visual toolbars
+
+Open the center **Actions** tab or choose **Project > Actions and Toolbar**.
+Create an action such as `SaveAction`, give it a caption, shortcut, and execute
+handler, then add it to the active form's toolbar. In the Menu inspector, link
+a menu item to the same action. Editing that action updates both clients.
+
+Toolbars are per-form, while actions belong to the whole project and can be
+reused by every form. Generated source stays ordinary Rosaline Go built from a
+row of buttons and separators. See
+[Shared actions and visual toolbars](docs/ACTIONS_TOOLBARS.md) and open the
+updated [`examples/notepad.rosaline`](examples/notepad.rosaline).
+
 ## Supported designer widgets
 
 Layouts: `Column`, `Row`, `Grid`, `Stack`, `Card`, `Scroll`, and `Tabs` with
@@ -194,7 +210,7 @@ Controls: `Label`, `Image`, `Button`, `TextBox`, `TextArea`, `CheckBox`,
 `Spacer`.
 
 Rosaline has more features than the current palette. Dialogs, canvases, timers,
-tables, and custom widgets can already be added by hand
+and custom widgets can already be added by hand
 to the generated project and are candidates for later Studio releases.
 
 ## Design file
@@ -220,11 +236,11 @@ env CGO_ENABLED=0 ROSALINE_SOURCE=../Rosaline go test ./...
 
 ## Project status
 
-Rosaline Studio v0.7.0 is an intentionally small early release. Generated code
+Rosaline Studio v0.8.0 is an intentionally small early release. Generated code
 and saved designs are designed to stay understandable while the visual tooling
 grows. The design schema is versioned, but the Studio API and file format remain
 experimental until v1.0. Studio automatically migrates version-2 through
-version-5 designs to version 6; version-1 designs remain intentionally
+version-6 designs to version 7; version-1 designs remain intentionally
 incompatible.
 
 ## License

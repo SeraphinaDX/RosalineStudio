@@ -18,8 +18,8 @@ Continue button.
 
 - The left panel contains the project's forms, widget palette, and hierarchy
   for the selected form.
-- The center switches between the visual Form, Menus, and integrated Go Code
-  views.
+- The center switches between the visual Form, Menus, Actions, and integrated
+  Go Code views.
 - The right inspector has Properties, Events, Pages, Menu, and Form tabs.
 
 Double-clicking a palette item adds it to the selected container. If a control
@@ -165,7 +165,27 @@ The form preview shows the menu bar immediately; F5 runs the native version.
 Open `examples/notepad.rosaline` for a complete menu-driven application with
 File, Edit, Help, nested menu, undo, redo, cut, copy, and paste commands.
 
-## 10. Add a picture
+## 10. Share an action between a menu and toolbar
+
+1. Open the center **Actions** tab and choose **New Action**.
+2. In the action properties below the lists, set the name to `GreetAction`,
+   caption to `Greet`, shortcut to `Primary+Return`, and execute handler to
+   `GreetClick`.
+3. Choose **Apply Action Properties**.
+4. Keep the action selected and choose **Add Action** under the form toolbar.
+5. Open **Menus**, select the menu item that should run the same command, and
+   choose `GreetAction` under **Shared action** in the Menu inspector.
+6. Choose **Apply Menu Properties**.
+
+The menu item and toolbar button now call the same `GreetClick` method. Change
+the action caption or shortcut once and both clients update. Double-click the
+action or linked menu item to edit the shared execute handler.
+
+Each form owns its toolbar, but all forms can reuse the project's actions. See
+`examples/notepad.rosaline` for New, Undo, Redo, Cut, Copy, and Paste actions
+shared between menus and a toolbar.
+
+## 11. Add a picture
 
 1. Select a container and add **Image** from the palette.
 2. Select the new Image control and choose **Choose Image...** in Properties.
@@ -177,7 +197,7 @@ Studio copies the picture into `greeting.assets/`. During generation it copies
 and embeds the asset in the Go application, so the compiled program can find
 the picture regardless of its working directory.
 
-## 11. Add a tabbed settings area
+## 12. Add a tabbed settings area
 
 1. Select the root layout and add **Tabs** from the palette. Studio creates
    General and Advanced pages automatically.
@@ -198,7 +218,7 @@ than a fake widget reference.
 Open `examples/preferences.rosaline` to see three pages, page-change behavior,
 and a save button working together.
 
-## 12. Add data controls
+## 13. Add data controls
 
 Add a **List**, **Table**, **Tree**, or **RadioGroup**, select it, and open the
 inner **Data** tab in Properties. Enter data using the help shown above the
@@ -222,7 +242,7 @@ if _, value, ok := app.Widgets().KindList.Selected(); ok {
 Open `examples/data_browser.rosaline` for a complete interface combining a
 tree, table, list, radio group, tabs, and working event methods.
 
-## 13. Keep designing safely
+## 14. Keep designing safely
 
 You can now add widgets, rename state fields, switch themes, or completely
 rearrange the layout. On every generation:
