@@ -1,5 +1,5 @@
 {
-  "version": 7,
+  "version": 8,
   "module": "example.com/rosaline-notepad",
   "actions": [
     {"id": "action-1", "name": "NewAction", "text": "New", "handler": "NewDocument", "shortcut": "Primary+N"},

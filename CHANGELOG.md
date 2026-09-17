@@ -2,6 +2,23 @@
 
 All notable Rosaline Studio changes are documented here.
 
+## v0.9.0 - 2026-09-17
+
+- Add a dedicated Lazarus-style Components designer and compact form tray for
+  behavioral components that do not draw widgets.
+- Add form-owned repeating and one-shot Timer components with interval,
+  automatic-start, runtime start/stop, and integrated tick-handler editing.
+- Add reusable Open File Dialog and Save File Dialog components with titles,
+  initial paths, default filenames, default extensions, and friendly filters.
+- Generate typed nonvisual references through `app.Components()`, mount timers
+  on their owning forms, and keep generated setup as readable Rosaline Go.
+- Add duplicate, delete, form-copy, validation, migration, and undo/redo support
+  for all nonvisual components.
+- Add a complete Components example and a focused guide showing timers and
+  native file dialogs together.
+- Advance the strict design schema to version 8 and automatically migrate
+  version-2 through version-7 designs.
+
 ## v0.8.0 - 2026-09-17
 
 - Add Lazarus-style project actions with one reusable name, caption, shortcut,

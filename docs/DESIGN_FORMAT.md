@@ -1,13 +1,13 @@
 # Rosaline design format
 
 Rosaline Studio stores visual projects as UTF-8 JSON files ending in
-`.rosaline`. The current schema version is `7`.
+`.rosaline`. The current schema version is `8`.
 
 ## Project fields
 
 | Field | Type | Meaning |
 |---|---|---|
-| `version` | integer | Design schema version; currently `7` |
+| `version` | integer | Design schema version; currently `8` |
 | `module` | string | Generated Go module path |
 | `actions` | action array | Reusable commands shared by menu items and toolbars |
 | `forms` | form array | Primary form first, followed by reusable secondary forms |
@@ -31,6 +31,7 @@ by the primary form.
 | `events` | object | `OnOpen`, `OnCloseRequest`, or `OnClose` handler methods |
 | `menus` | menu array | Top-level menus for this form's native menu bar |
 | `toolbar` | toolbar item array | Ordered action buttons and separators for this form |
+| `components` | component array | Form-owned timers and file dialogs |
 
 `OnCloseRequest` is the one boolean event. Its handler must return `true` to
 allow the close or `false` to keep the form open. Other form and widget event
@@ -69,6 +70,53 @@ Every project action has a globally unique internal `id` and a unique exported
 Each form's `toolbar` contains items with a unique `id` and a `kind` of
 `Action` or `Separator`. Action items also have an `action` field referring to
 a project-action ID. Separators have no action field.
+
+## Nonvisual component fields
+
+Every nonvisual component has a globally unique internal `id`, a unique
+exported `name`, and a `kind` of `Timer`, `OpenFileDialog`, or
+`SaveFileDialog`. Components belong to a form but are exposed together through
+the generated `app.Components()` registry.
+
+Timer fields:
+
+| Field | Meaning |
+|---|---|
+| `interval` | Positive interval in milliseconds |
+| `repeating` | Use a repeating timer instead of a one-shot timer |
+| `enabled` | Start when the owning form opens |
+| `handler` | Optional no-result tick method |
+
+File-dialog fields:
+
+| Field | Meaning |
+|---|---|
+| `title` | Native dialog title |
+| `initialDirectory` | Optional starting directory |
+| `initialFile` | Optional starting filename |
+| `defaultExtension` | Extension supplied when saving without one |
+| `filters` | Lines formatted as `Name | .ext, .ext` |
+
+```json
+"components": [
+  {
+    "id": "component-1",
+    "kind": "Timer",
+    "name": "RefreshTimer",
+    "interval": 1000,
+    "repeating": true,
+    "enabled": true,
+    "handler": "RefreshTimerTick"
+  },
+  {
+    "id": "component-2",
+    "kind": "OpenFileDialog",
+    "name": "OpenDocumentDialog",
+    "title": "Open a document",
+    "filters": ["Text files | .txt, .md", "All files | *"]
+  }
+]
+```
 
 ## Widget fields
 
@@ -182,7 +230,7 @@ string named by `name` and support `OnChange`.
 
 ```json
 {
-  "version": 7,
+  "version": 8,
   "module": "example.com/greeting",
   "actions": [
     {
@@ -273,7 +321,7 @@ names, handler identifiers, handler return shape, and Go syntax. Widget moves
 stay within a form, while copy and paste can safely cross forms.
 
 Studio automatically migrates version-2 single-form and version-3 through
-version-6 multi-form designs to version 7; save the file to keep the upgraded
+version-7 multi-form designs to version 8; save the file to keep the upgraded
 structure. Version-1 designs used a generic string action dispatcher and
 remain intentionally incompatible.
 Commit important design files to Git before opening them in a newer Studio

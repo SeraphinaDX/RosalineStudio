@@ -1,0 +1,113 @@
+{
+  "version": 8,
+  "module": "example.com/rosaline-components",
+  "forms": [
+    {
+      "id": "form-1",
+      "name": "MainForm",
+      "title": "Rosaline Components",
+      "width": 760,
+      "height": 460,
+      "padding": 16,
+      "theme": "Lavender",
+      "root": {
+        "id": "root",
+        "kind": "Column",
+        "component": "MainLayout",
+        "children": [
+          {
+            "id": "node-1",
+            "kind": "Label",
+            "component": "TitleLabel",
+            "text": "Timers and File Dialogs",
+            "bold": true
+          },
+          {
+            "id": "node-2",
+            "kind": "Label",
+            "component": "ClockLabel",
+            "text": "The timer will update this label once per second."
+          },
+          {
+            "id": "node-3",
+            "kind": "Row",
+            "component": "CommandRow",
+            "children": [
+              {
+                "id": "node-4",
+                "kind": "Button",
+                "component": "OpenButton",
+                "text": "Open File...",
+                "events": {"OnClick": "OpenFile"},
+                "primary": true
+              },
+              {
+                "id": "node-5",
+                "kind": "Button",
+                "component": "SaveButton",
+                "text": "Save File...",
+                "events": {"OnClick": "SaveFile"}
+              },
+              {
+                "id": "node-6",
+                "kind": "Button",
+                "component": "TimerButton",
+                "text": "Start or Stop Timer",
+                "events": {"OnClick": "ToggleTimer"}
+              }
+            ],
+            "gap": 8
+          },
+          {
+            "id": "node-7",
+            "kind": "Label",
+            "component": "StatusLabel",
+            "text": "Choose a file or wait for the timer."
+          }
+        ],
+        "gap": 12,
+        "padding": 12,
+        "expand": true
+      },
+      "components": [
+        {
+          "id": "component-1",
+          "kind": "Timer",
+          "name": "RefreshTimer",
+          "interval": 1000,
+          "repeating": true,
+          "enabled": true,
+          "handler": "RefreshTimerTick"
+        },
+        {
+          "id": "component-2",
+          "kind": "OpenFileDialog",
+          "name": "OpenDocumentDialog",
+          "title": "Open a document",
+          "filters": [
+            "Text files | .txt, .md",
+            "All files | *"
+          ]
+        },
+        {
+          "id": "component-3",
+          "kind": "SaveFileDialog",
+          "name": "SaveDocumentDialog",
+          "title": "Save a document",
+          "initialFile": "notes.txt",
+          "defaultExtension": ".txt",
+          "filters": [
+            "Text files | .txt",
+            "All files | *"
+          ]
+        }
+      ]
+    }
+  ],
+  "handlers": {
+    "OpenFile": "path, ok := app.Components().OpenDocumentDialog.Execute()\nif ok {\n\tapp.Widgets().StatusLabel.SetText(\"Opened: \" + path)\n}",
+    "RefreshTimerTick": "app.Widgets().ClockLabel.SetText(\"The repeating timer fired.\")",
+    "SaveFile": "path, ok := app.Components().SaveDocumentDialog.Execute()\nif ok {\n\tapp.Widgets().StatusLabel.SetText(\"Save to: \" + path)\n}",
+    "ToggleTimer": "timer := app.Components().RefreshTimer\nif timer.Running() {\n\ttimer.Stop()\n\tapp.Widgets().TimerButton.SetText(\"Start Timer\")\n} else {\n\ttimer.Start()\n\tapp.Widgets().TimerButton.SetText(\"Stop Timer\")\n}"
+  }
+}

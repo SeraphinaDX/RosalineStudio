@@ -278,10 +278,9 @@ func exportedIdentifier(value string) string {
 }
 
 func generatedUI(project *designProject, context *generationContext) string {
-	imports := fmt.Sprintf("import rosaline %q\n", rosalineModule)
+	imports := generatedUIImports(project)
 	assetSupport := ""
 	if len(projectAssets(project)) != 0 {
-		imports = fmt.Sprintf("import (\n\t\"embed\"\n\n\trosaline %q\n)\n", rosalineModule)
 		assetSupport = `//go:embed assets/*
 var generatedAssets embed.FS
 
@@ -297,7 +296,8 @@ func generatedPicture(name string) *rosaline.Picture {
 	}
 	main := project.mainForm()
 	var setup strings.Builder
-	fmt.Fprintf(&setup, "\tgeneratedWidgets = UIWidgets{}\n\tgeneratedWindows = UIWindows{%s: rosaline.MainWindow()}\n", main.Name)
+	fmt.Fprintf(&setup, "\tgeneratedWidgets = UIWidgets{}\n\tgeneratedComponents = UIComponents{}\n\tgeneratedWindows = UIWindows{%s: rosaline.MainWindow()}\n", main.Name)
+	setup.WriteString(generatedComponentSetup(project))
 	for _, form := range project.Forms[1:] {
 		fmt.Fprintf(&setup, `	generatedWindows.%s = rosaline.NewWindow(rosaline.WindowOptions{
 		Title: %q,
@@ -307,9 +307,10 @@ func generatedPicture(name string) *rosaline.Picture {
 		Theme: theme%s(),
 		Parent: generatedWindows.%s,
 		Menu: build%sMenu(app),
+		Timers: %s,
 %s		Content: build%s(app),
 	})
-`, form.Name, form.Title, max(320, form.Width), max(240, form.Height), max(0, form.Padding), form.Name, main.Name, form.Name, generatedFormCallbacks(form, 2), form.Name)
+`, form.Name, form.Title, max(320, form.Width), max(240, form.Height), max(0, form.Padding), form.Name, main.Name, form.Name, generatedFormTimers(form), generatedFormCallbacks(form, 2), form.Name)
 	}
 
 	var builders strings.Builder
@@ -334,15 +335,20 @@ func runGeneratedApplication(app *Application) {
 		Padding: %d,
 		Theme: theme%s(),
 		Menu: build%sMenu(app),
+		Timers: %s,
 %s		Content: build%s(app),
 	})
 }
 
 %svar generatedWidgets UIWidgets
+var generatedComponents UIComponents
 var generatedWindows UIWindows
 
 // Widgets returns every control created by the visual designer.
 func (app *Application) Widgets() *UIWidgets { return &generatedWidgets }
+
+// Components returns every nonvisual timer and file dialog in the design.
+func (app *Application) Components() *UIComponents { return &generatedComponents }
 
 // Windows returns the reusable handle for every designed form.
 func (app *Application) Windows() *UIWindows { return &generatedWindows }
@@ -352,7 +358,105 @@ func rememberWidget[T rosaline.Widget](slot *T, widget T) T {
 	return widget
 }
 
-%s`, generatedMarker, imports, assetSupport, setup.String(), main.Title, max(320, main.Width), max(240, main.Height), max(0, main.Padding), main.Name, main.Name, generatedFormCallbacks(main, 2), main.Name, builders.String(), themes.String())
+%s`, generatedMarker, imports, assetSupport, setup.String(), main.Title, max(320, main.Width), max(240, main.Height), max(0, main.Padding), main.Name, main.Name, generatedFormTimers(main), generatedFormCallbacks(main, 2), main.Name, builders.String(), themes.String())
+}
+
+func generatedUIImports(project *designProject) string {
+	imports := make([]string, 0, 3)
+	if len(projectAssets(project)) != 0 {
+		imports = append(imports, "\"embed\"")
+	}
+	if projectHasTimers(project) {
+		imports = append(imports, "\"time\"")
+	}
+	imports = append(imports, fmt.Sprintf("rosaline %q", rosalineModule))
+	if len(imports) == 1 {
+		return "import " + imports[0] + "\n"
+	}
+	return "import (\n\t" + strings.Join(imports, "\n\t") + "\n)\n"
+}
+
+func projectHasTimers(project *designProject) bool {
+	if project == nil {
+		return false
+	}
+	for _, form := range project.Forms {
+		for _, component := range form.Components {
+			if component != nil && component.Kind == componentTimer {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func projectHasFileDialogs(project *designProject) bool {
+	if project == nil {
+		return false
+	}
+	for _, form := range project.Forms {
+		for _, component := range form.Components {
+			if component != nil && (component.Kind == componentOpenDialog || component.Kind == componentSaveDialog) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func generatedComponentSetup(project *designProject) string {
+	var result strings.Builder
+	for _, form := range project.Forms {
+		for _, component := range form.Components {
+			if component == nil {
+				continue
+			}
+			switch component.Kind {
+			case componentTimer:
+				constructor := "Every"
+				if !component.Repeating {
+					constructor = "After"
+				}
+				callback := "nil"
+				if handler := strings.TrimSpace(component.Handler); handler != "" {
+					callback = "func() { app." + handler + "() }"
+				}
+				fmt.Fprintf(&result, "\tgeneratedComponents.%s = rosaline.%s(time.Duration(%d)*time.Millisecond, %s)\n", component.Name, constructor, component.Interval, callback)
+				if !component.Enabled {
+					fmt.Fprintf(&result, "\tgeneratedComponents.%s.Stop()\n", component.Name)
+				}
+			case componentOpenDialog, componentSaveDialog:
+				fmt.Fprintf(&result, "\tgeneratedComponents.%s = &UIFileDialog{save: %t, options: %s}\n", component.Name, component.Kind == componentSaveDialog, generatedFileDialogOptions(component))
+			}
+		}
+	}
+	return result.String()
+}
+
+func generatedFileDialogOptions(component *designComponent) string {
+	filters, _ := parseDesignFileFilters(component.Filters)
+	var filterSource strings.Builder
+	for _, filter := range filters {
+		extensions := make([]string, 0, len(filter.Extensions))
+		for _, extension := range filter.Extensions {
+			extensions = append(extensions, strconv.Quote(extension))
+		}
+		fmt.Fprintf(&filterSource, "{Name: %q, Extensions: []string{%s}}, ", filter.Name, strings.Join(extensions, ", "))
+	}
+	return fmt.Sprintf("rosaline.FileDialogOptions{Title: %q, InitialDirectory: %q, InitialFile: %q, DefaultExtension: %q, Filters: []rosaline.FileFilter{%s}}", component.Title, component.InitialDirectory, component.InitialFile, component.DefaultExtension, filterSource.String())
+}
+
+func generatedFormTimers(form *designForm) string {
+	names := make([]string, 0)
+	for _, component := range form.Components {
+		if component != nil && component.Kind == componentTimer {
+			names = append(names, "generatedComponents."+component.Name)
+		}
+	}
+	if len(names) == 0 {
+		return "nil"
+	}
+	return "[]*rosaline.Timer{" + strings.Join(names, ", ") + "}"
 }
 
 func generateFormContent(project *designProject, form *designForm, context *generationContext) string {
@@ -479,6 +583,40 @@ func generatedState(project *designProject, context *generationContext) string {
 	for _, form := range project.Forms {
 		fmt.Fprintf(&windows, "\t%s *rosaline.Window\n", form.Name)
 	}
+	var components strings.Builder
+	for _, form := range project.Forms {
+		for _, component := range form.Components {
+			if component == nil {
+				continue
+			}
+			componentType := "*UIFileDialog"
+			if component.Kind == componentTimer {
+				componentType = "*rosaline.Timer"
+			}
+			fmt.Fprintf(&components, "\t%s %s\n", component.Name, componentType)
+		}
+	}
+	dialogSupport := ""
+	if projectHasFileDialogs(project) {
+		dialogSupport = `// UIFileDialog is a reusable nonvisual file picker designed in Studio.
+type UIFileDialog struct {
+	save    bool
+	options rosaline.FileDialogOptions
+}
+
+// Execute opens the configured native file dialog.
+func (dialog *UIFileDialog) Execute() (string, bool) {
+	if dialog == nil {
+		return "", false
+	}
+	if dialog.save {
+		return rosaline.SaveFileDialog(dialog.options)
+	}
+	return rosaline.OpenFileDialog(dialog.options)
+}
+
+`
+	}
 	return fmt.Sprintf(`// %s
 package main
 
@@ -492,10 +630,14 @@ type UIState struct {
 type UIWidgets struct {
 %s}
 
+%s// UIComponents contains form-owned timers and reusable file dialogs.
+type UIComponents struct {
+%s}
+
 // UIWindows contains reusable handles for the primary and secondary forms.
 type UIWindows struct {
 %s}
-`, generatedMarker, rosalineModule, fields.String(), widgets.String(), windows.String())
+`, generatedMarker, rosalineModule, fields.String(), widgets.String(), dialogSupport, components.String(), windows.String())
 }
 
 func generatedEvents(project *designProject) string {
@@ -556,6 +698,13 @@ func referencedHandlers(project *designProject) []string {
 		for _, form := range project.Forms {
 			if form == nil {
 				continue
+			}
+			for _, component := range form.Components {
+				if component != nil && component.Kind == componentTimer {
+					if handler := strings.TrimSpace(component.Handler); handler != "" {
+						seen[handler] = true
+					}
+				}
 			}
 			for _, handler := range form.Events {
 				if handler = strings.TrimSpace(handler); handler != "" {
@@ -637,7 +786,8 @@ Edit visual event handlers in Rosaline Studio. Put reusable application logic
 in handlers.go. Studio regenerates ui_generated.go, state_generated.go, and
 events_generated.go, so do not edit those three files directly. Event code can
 open designed forms through app.Windows() and update controls through
-app.Widgets().
+app.Widgets(). Nonvisual timers and file dialogs are available through
+app.Components().
 `, title)
 }
 

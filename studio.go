@@ -61,6 +61,7 @@ const (
 	workspaceFormTab = iota
 	workspaceMenuTab
 	workspaceActionTab
+	workspaceComponentTab
 	workspaceCodeTab
 )
 
@@ -76,6 +77,7 @@ type studio struct {
 	settings  projectInspectorState
 	menu      menuInspectorState
 	action    actionInspectorState
+	component componentInspectorState
 	pageTitle string
 
 	palette          *rosaline.ListWidget
@@ -87,6 +89,7 @@ type studio struct {
 	workspace        *rosaline.TabsWidget
 	menuTree         *rosaline.TreeWidget
 	actionList       *rosaline.ListWidget
+	componentList    *rosaline.ListWidget
 	toolbarList      *rosaline.ListWidget
 	menuActionChoice *rosaline.ComboBoxWidget
 	codeEditor       *rosaline.TextAreaWidget
@@ -97,10 +100,13 @@ type studio struct {
 	syncMenu         bool
 	menuID           string
 	actionID         string
+	componentID      string
 	toolbarID        string
 	actionIDs        []string
+	componentIDs     []string
 	toolbarIDs       []string
 	syncAction       bool
+	syncComponent    bool
 	syncToolbar      bool
 	tabPages         map[string]string
 	dragID           string
@@ -247,6 +253,15 @@ func (studio *studio) run() {
 		studio.selectAction(index)
 		studio.editActionHandler()
 	})
+	studio.componentList = rosaline.List().Size(31, 20).Expand()
+	studio.componentList.OnSelect(func(index int, _ string) {
+		studio.selectComponent(index)
+	}).OnActivate(func(index int, _ string) {
+		studio.selectComponent(index)
+		if component := studio.selectedComponent(); component != nil && component.Kind == componentTimer {
+			studio.editTimerHandler()
+		}
+	})
 	studio.toolbarList = rosaline.List().Size(34, 16).Expand()
 	studio.toolbarList.OnSelect(func(index int, _ string) {
 		studio.selectToolbarItem(index)
@@ -321,6 +336,7 @@ func (studio *studio) run() {
 	studio.rebuildTree()
 	studio.rebuildMenuTree()
 	studio.rebuildActions()
+	studio.rebuildComponents()
 
 	menu := rosaline.MenuBar(
 		rosaline.Menu("File",
@@ -355,6 +371,7 @@ func (studio *studio) run() {
 			rosaline.MenuSeparator(),
 			rosaline.MenuItem("Menu Designer", studio.showMenuDesigner),
 			rosaline.MenuItem("Actions and Toolbar", studio.showActionDesigner),
+			rosaline.MenuItem("Nonvisual Components", studio.showComponentDesigner),
 		),
 		rosaline.Menu("Help",
 			rosaline.MenuItem("Quick Help", studio.showHelp).Shortcut("F1"),
@@ -428,6 +445,7 @@ func (studio *studio) selectForm(id string) {
 	studio.selectedID = form.Root.ID
 	studio.menuID = ""
 	studio.toolbarID = ""
+	studio.componentID = ""
 	studio.loadProjectInspector()
 	studio.refreshDesign()
 	studio.status = "Editing " + form.Name
@@ -481,6 +499,11 @@ func (studio *studio) buildWorkspace() rosaline.Widget {
 			rosaline.Button("Delete Selected", studio.deleteSelected),
 		).Gap(6),
 		rosaline.Center(rosaline.Card(studio.canvas).Padding(5)),
+		rosaline.Card(rosaline.Row(
+			rosaline.LabelFunc(studio.componentTrayLabel).Color(rosaline.DefaultTheme.Muted),
+			rosaline.Spring(),
+			rosaline.Button("Components...", studio.showComponentDesigner),
+		).Gap(6)).Padding(5),
 	).Gap(7).Expand()
 	code := rosaline.Column(
 		rosaline.LabelFunc(studio.codeHeader).Bold().Color(rosaline.Rose),
@@ -564,6 +587,7 @@ func (studio *studio) buildWorkspace() rosaline.Widget {
 		rosaline.Tab("Form", form),
 		rosaline.Tab("Menus", menus),
 		rosaline.Tab("Actions", actions),
+		rosaline.Tab("Components", studio.buildComponentWorkspace()),
 		rosaline.Tab("Code", code),
 	).Expand()
 	return rosaline.Card(studio.workspace).Padding(5).Expand()
@@ -1406,6 +1430,7 @@ func (studio *studio) refreshDesign() {
 	studio.ensureMenuSelection()
 	studio.loadMenuInspector()
 	studio.rebuildActions()
+	studio.rebuildComponents()
 	studio.rebuildForms()
 	studio.rebuildTree()
 	studio.rebuildMenuTree()
@@ -1549,6 +1574,7 @@ func (studio *studio) newDesign() {
 	studio.menuID = ""
 	studio.actionID = ""
 	studio.toolbarID = ""
+	studio.componentID = ""
 	studio.undo, studio.redo = nil, nil
 	studio.clipboard = nil
 	studio.dirty = false
@@ -1592,6 +1618,7 @@ func (studio *studio) openDesign() {
 	studio.menuID = ""
 	studio.actionID = ""
 	studio.toolbarID = ""
+	studio.componentID = ""
 	studio.undo, studio.redo = nil, nil
 	studio.clipboard = nil
 	studio.dirty = false
@@ -1738,7 +1765,7 @@ func (studio *studio) documentName() string {
 func (studio *studio) showHelp() {
 	rosaline.Message(
 		"Rosaline Studio Quick Help",
-		"1. Select or create a form in Project Forms.\n2. Select a container and double-click a palette item to add it.\n3. Give controls memorable component names in Properties.\n4. Right-click to cut, copy, paste, duplicate, or delete widgets.\n5. Add Tabs, click a page header, and manage pages in the Pages inspector.\n6. Edit List, Table, Tree, or RadioGroup content under Properties > Data.\n7. Use Events to assign a handler, or double-click a form control.\n8. Open Menus to build the form's menu bar.\n9. Open Actions to share commands between menus and a form toolbar.\n10. Select a form's root layout to edit OnOpen, OnCloseRequest, and OnClose.\n11. Write event code with app.Widgets().Name and app.Windows().FormName.\n12. Press F5 to generate and run.\n\nStudio never overwrites handlers.go, main.go, go.mod, or README.md.",
+		"1. Select or create a form in Project Forms.\n2. Select a container and double-click a palette item to add it.\n3. Give controls memorable component names in Properties.\n4. Right-click to cut, copy, paste, duplicate, or delete widgets.\n5. Add Tabs, click a page header, and manage pages in the Pages inspector.\n6. Edit List, Table, Tree, or RadioGroup content under Properties > Data.\n7. Use Events to assign a handler, or double-click a form control.\n8. Open Menus to build the form's menu bar.\n9. Open Actions to share commands between menus and a form toolbar.\n10. Open Components to add timers and reusable file dialogs.\n11. Select a form's root layout to edit OnOpen, OnCloseRequest, and OnClose.\n12. Write event code with app.Widgets(), app.Components(), and app.Windows().\n13. Press F5 to generate and run.\n\nStudio never overwrites handlers.go, main.go, go.mod, or README.md.",
 	)
 	studio.canvas.Focus()
 }
@@ -1746,7 +1773,7 @@ func (studio *studio) showHelp() {
 func (studio *studio) showAbout() {
 	rosaline.Message(
 		"About Rosaline Studio",
-		"Rosaline Studio v0.8.0\n\nA pure-Go Lazarus-style RAD environment built with Rosaline.\n\nGenerated code remains normal, readable Rosaline Go.",
+		"Rosaline Studio v0.9.0\n\nA pure-Go Lazarus-style RAD environment built with Rosaline.\n\nGenerated code remains normal, readable Rosaline Go.",
 	)
 	studio.canvas.Focus()
 }

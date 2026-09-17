@@ -185,6 +185,13 @@ func projectHandlerSignatures(project *designProject) (map[string]handlerSignatu
 			if form == nil {
 				continue
 			}
+			for _, component := range form.Components {
+				if component != nil && component.Kind == componentTimer {
+					if err := register(component.Handler, false); err != nil {
+						return nil, err
+					}
+				}
+			}
 			for event, handler := range form.Events {
 				if err := register(handler, eventReturnsBool(event)); err != nil {
 					return nil, err

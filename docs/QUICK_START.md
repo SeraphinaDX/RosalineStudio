@@ -18,8 +18,8 @@ Continue button.
 
 - The left panel contains the project's forms, widget palette, and hierarchy
   for the selected form.
-- The center switches between the visual Form, Menus, Actions, and integrated
-  Go Code views.
+- The center switches between the visual Form, Menus, Actions, Components, and
+  integrated Go Code views.
 - The right inspector has Properties, Events, Pages, Menu, and Form tabs.
 
 Double-clicking a palette item adds it to the selected container. If a control
@@ -185,7 +185,35 @@ Each form owns its toolbar, but all forms can reuse the project's actions. See
 `examples/notepad.rosaline` for New, Undo, Redo, Cut, Copy, and Paste actions
 shared between menus and a toolbar.
 
-## 11. Add a picture
+## 11. Add a timer or file dialog
+
+Open the center **Components** tab. Choose **Add Timer**, set the interval to
+`1000`, and choose **Assign and Edit Tick**. A timer event is normal Go code:
+
+```go
+app.Widgets().GreetingLabel.SetText("One second passed")
+```
+
+Choose **Add Open Dialog**, name it `OpenDocumentDialog`, and add this filter:
+
+```text
+Text files | .txt, .md
+```
+
+Any button, menu, action, or timer event can show it:
+
+```go
+path, ok := app.Components().OpenDocumentDialog.Execute()
+if ok {
+	app.Widgets().GreetingLabel.SetText(path)
+}
+```
+
+Nonvisual components belong to the selected form and appear in the tray below
+its preview. See [Nonvisual components](NONVISUAL_COMPONENTS.md) for timer
+start/stop behavior, save dialogs, filters, and the generated API.
+
+## 12. Add a picture
 
 1. Select a container and add **Image** from the palette.
 2. Select the new Image control and choose **Choose Image...** in Properties.
@@ -197,7 +225,7 @@ Studio copies the picture into `greeting.assets/`. During generation it copies
 and embeds the asset in the Go application, so the compiled program can find
 the picture regardless of its working directory.
 
-## 12. Add a tabbed settings area
+## 13. Add a tabbed settings area
 
 1. Select the root layout and add **Tabs** from the palette. Studio creates
    General and Advanced pages automatically.
@@ -218,7 +246,7 @@ than a fake widget reference.
 Open `examples/preferences.rosaline` to see three pages, page-change behavior,
 and a save button working together.
 
-## 13. Add data controls
+## 14. Add data controls
 
 Add a **List**, **Table**, **Tree**, or **RadioGroup**, select it, and open the
 inner **Data** tab in Properties. Enter data using the help shown above the
@@ -242,7 +270,7 @@ if _, value, ok := app.Widgets().KindList.Selected(); ok {
 Open `examples/data_browser.rosaline` for a complete interface combining a
 tree, table, list, radio group, tabs, and working event methods.
 
-## 14. Keep designing safely
+## 15. Keep designing safely
 
 You can now add widgets, rename state fields, switch themes, or completely
 rearrange the layout. On every generation:
