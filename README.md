@@ -10,7 +10,7 @@ Rosaline Studio is itself a pure-Go Rosaline application. It builds with
 
 ![Screenshot](rosaline-studio.avif)
 
-## What v0.6.0 can do
+## What v0.7.0 can do
 
 - Design a primary form and any number of reusable secondary forms
 - Create, duplicate, rename, select, configure, and delete forms from the
@@ -28,6 +28,8 @@ Rosaline Studio is itself a pure-Go Rosaline application. It builds with
 - Add tabbed interfaces from the palette with friendly page containers
 - Add, rename, duplicate, reorder, select, and delete pages in the Pages inspector
 - Switch designed pages directly in the form preview
+- Design lists, tables, trees, and vertical or horizontal radio groups
+- Enter realistic control data through a simple multiline Data inspector
 - Edit text, state names, sizing, spacing, and common options
 - Assign `OnClick`, `OnChange`, and `OnSubmit` methods in the Events inspector
 - Double-click a form control to create or edit its default event
@@ -156,6 +158,20 @@ Generated code stays ordinary Rosaline Go: a `rosaline.Tabs` contains
 three-page settings application, and see
 [Designing tabs and pages](docs/TABS_DESIGNER.md) for the full workflow.
 
+## Visual data controls
+
+Studio can design `List`, `Table`, `Tree`, and `RadioGroup` controls. Select one
+and open **Properties > Data**. The editor explains the syntax for that control:
+one item per line, `Label = value` radio choices, `|`-separated table cells, or
+`/`-separated tree paths.
+
+The controls expose their native Rosaline events in the Events inspector.
+Generated event methods can inspect the selected item through the typed
+component in `app.Widgets()`. Open
+[`examples/data_browser.rosaline`](examples/data_browser.rosaline) for a
+complete project-browser interface, and see
+[Designing data controls](docs/DATA_CONTROLS.md) for each data format and event.
+
 ## Visual menu designer
 
 Open the center **Menus** tab or choose **Project > Menu Designer**. Add a
@@ -174,7 +190,8 @@ Layouts: `Column`, `Row`, `Grid`, `Stack`, `Card`, `Scroll`, and `Tabs` with
 designer-managed `TabPage` containers.
 
 Controls: `Label`, `Image`, `Button`, `TextBox`, `TextArea`, `CheckBox`,
-`ComboBox`, `Slider`, `ProgressBar`, and `Spacer`.
+`ComboBox`, `RadioGroup`, `List`, `Table`, `Tree`, `Slider`, `ProgressBar`, and
+`Spacer`.
 
 Rosaline has more features than the current palette. Dialogs, canvases, timers,
 tables, and custom widgets can already be added by hand
@@ -203,11 +220,11 @@ env CGO_ENABLED=0 ROSALINE_SOURCE=../Rosaline go test ./...
 
 ## Project status
 
-Rosaline Studio v0.6.0 is an intentionally small early release. Generated code
+Rosaline Studio v0.7.0 is an intentionally small early release. Generated code
 and saved designs are designed to stay understandable while the visual tooling
 grows. The design schema is versioned, but the Studio API and file format remain
 experimental until v1.0. Studio automatically migrates version-2 through
-version-4 designs to version 5; version-1 designs remain intentionally
+version-5 designs to version 6; version-1 designs remain intentionally
 incompatible.
 
 ## License

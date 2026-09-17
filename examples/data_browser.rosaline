@@ -1,0 +1,177 @@
+{
+  "version": 6,
+  "module": "example.com/rosaline-data-browser",
+  "forms": [
+    {
+      "id": "form-1",
+      "name": "MainForm",
+      "title": "Rosaline Project Browser",
+      "width": 900,
+      "height": 620,
+      "padding": 14,
+      "theme": "Lavender",
+      "root": {
+        "id": "root",
+        "kind": "Column",
+        "component": "MainLayout",
+        "children": [
+          {
+            "id": "node-1",
+            "kind": "Label",
+            "component": "TitleLabel",
+            "text": "Project Browser",
+            "bold": true
+          },
+          {
+            "id": "node-2",
+            "kind": "Label",
+            "component": "InstructionsLabel",
+            "text": "Select or activate an item to run its generated event method."
+          },
+          {
+            "id": "node-3",
+            "kind": "Tabs",
+            "component": "BrowserTabs",
+            "events": {
+              "OnChange": "BrowserPageChanged"
+            },
+            "children": [
+              {
+                "id": "node-4",
+                "kind": "TabPage",
+                "component": "BrowserPage",
+                "text": "Browser",
+                "children": [
+                  {
+                    "id": "node-5",
+                    "kind": "Row",
+                    "component": "BrowserRow",
+                    "children": [
+                      {
+                        "id": "node-6",
+                        "kind": "Tree",
+                        "component": "ProjectTree",
+                        "events": {
+                          "OnSelect": "ProjectTreeSelected",
+                          "OnActivate": "ProjectTreeActivated"
+                        },
+                        "data": [
+                          "Rosaline",
+                          "Rosaline/Forms",
+                          "Rosaline/Forms/MainForm",
+                          "Rosaline/Forms/SettingsForm",
+                          "Rosaline/Assets",
+                          "Rosaline/Assets/logo.avif",
+                          "Dependencies"
+                        ],
+                        "expand": true
+                      },
+                      {
+                        "id": "node-7",
+                        "kind": "Table",
+                        "component": "ComponentTable",
+                        "events": {
+                          "OnSelect": "ComponentTableSelected",
+                          "OnActivate": "ComponentTableActivated"
+                        },
+                        "data": [
+                          "Component | Kind | Status",
+                          "MainLayout | Column | Ready",
+                          "BrowserTabs | Tabs | Ready",
+                          "ProjectTree | Tree | Selected",
+                          "ComponentTable | Table | Ready"
+                        ],
+                        "expand": true
+                      }
+                    ],
+                    "gap": 10,
+                    "padding": 4,
+                    "expand": true
+                  }
+                ],
+                "gap": 10,
+                "padding": 10,
+                "expand": true
+              },
+              {
+                "id": "node-8",
+                "kind": "TabPage",
+                "component": "ChoicesPage",
+                "text": "Choices",
+                "children": [
+                  {
+                    "id": "node-9",
+                    "kind": "Label",
+                    "component": "ViewModeLabel",
+                    "text": "View mode"
+                  },
+                  {
+                    "id": "node-10",
+                    "kind": "RadioGroup",
+                    "component": "ViewModeRadioGroup",
+                    "name": "ViewMode",
+                    "events": {
+                      "OnChange": "ViewModeChanged"
+                    },
+                    "data": [
+                      "Automatic = auto",
+                      "Details = details",
+                      "Compact = compact"
+                    ],
+                    "horizontal": true
+                  },
+                  {
+                    "id": "node-11",
+                    "kind": "Label",
+                    "component": "FilterLabel",
+                    "text": "Visible component kinds"
+                  },
+                  {
+                    "id": "node-12",
+                    "kind": "List",
+                    "component": "KindList",
+                    "events": {
+                      "OnSelect": "KindSelected",
+                      "OnActivate": "KindActivated"
+                    },
+                    "data": [
+                      "All controls",
+                      "Layouts",
+                      "Inputs",
+                      "Data controls",
+                      "Images"
+                    ],
+                    "expand": true
+                  }
+                ],
+                "gap": 10,
+                "padding": 12,
+                "expand": true
+              }
+            ],
+            "expand": true
+          },
+          {
+            "id": "node-13",
+            "kind": "Label",
+            "component": "StatusLabel",
+            "text": "Ready"
+          }
+        ],
+        "gap": 10,
+        "padding": 10,
+        "expand": true
+      }
+    }
+  ],
+  "handlers": {
+    "BrowserPageChanged": "app.Widgets().StatusLabel.SetText(\"Changed browser page\")",
+    "ProjectTreeSelected": "if node, ok := app.Widgets().ProjectTree.Selected(); ok {\n\tapp.Widgets().StatusLabel.SetText(\"Tree: \" + node.Value())\n}",
+    "ProjectTreeActivated": "if node, ok := app.Widgets().ProjectTree.Selected(); ok {\n\trosaline.Message(\"Tree item\", node.Value())\n}",
+    "ComponentTableSelected": "if _, values, ok := app.Widgets().ComponentTable.Selected(); ok && len(values) > 0 {\n\tapp.Widgets().StatusLabel.SetText(\"Component: \" + values[0])\n}",
+    "ComponentTableActivated": "if _, values, ok := app.Widgets().ComponentTable.Selected(); ok && len(values) > 0 {\n\trosaline.Message(\"Component\", values[0])\n}",
+    "ViewModeChanged": "app.Widgets().StatusLabel.SetText(\"View mode: \" + app.State.ViewMode)",
+    "KindSelected": "if _, value, ok := app.Widgets().KindList.Selected(); ok {\n\tapp.Widgets().StatusLabel.SetText(\"Filter: \" + value)\n}",
+    "KindActivated": "if _, value, ok := app.Widgets().KindList.Selected(); ok {\n\trosaline.Message(\"Filter\", value)\n}"
+  }
+}

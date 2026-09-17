@@ -13,6 +13,12 @@ import (
 func TestDesignRoundTrip(t *testing.T) {
 	project := newProject()
 	project.mainForm().Title = "Round trip"
+	radio, err := project.addNear(project.mainForm().Root.ID, kindRadioGroup)
+	if err != nil {
+		t.Fatal(err)
+	}
+	radio.Data = []string{"Detailed = details", "Compact = compact"}
+	radio.Horizontal = true
 	project.mainForm().Menus = []*designMenu{{
 		ID: "menu-1", Kind: menuKindMenu, Text: "File",
 		Children: []*designMenu{{ID: "menu-2", Kind: menuKindItem, Text: "Save", Handler: "ContinueClick", Shortcut: "Primary+S"}},
@@ -190,6 +196,36 @@ func TestVersionFourDesignIsUpgraded(t *testing.T) {
 	}
 }
 
+func TestVersionFiveDesignIsUpgraded(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "old-v5.rosaline")
+	data := []byte(`{"version":5,"module":"example.com/old","forms":[{"id":"form-1","name":"MainForm","title":"Old","width":720,"height":520,"padding":16,"theme":"Rosaline","root":{"id":"root","kind":"Column","component":"MainLayout"}}]}`)
+	if err := os.WriteFile(path, data, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	project, err := loadDesign(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if project.Version != designVersion {
+		t.Fatalf("version-5 design was not migrated: %#v", project)
+	}
+}
+
+func TestDataControlsHaveUsefulDefaults(t *testing.T) {
+	for _, kind := range []widgetKind{kindList, kindTable, kindTree, kindRadioGroup} {
+		node := defaultNode(kind, "test")
+		if len(node.Data) == 0 {
+			t.Fatalf("new %s has no sample data", kind)
+		}
+	}
+	if !defaultNode(kindList, "list").Expand || !defaultNode(kindTable, "table").Expand || !defaultNode(kindTree, "tree").Expand {
+		t.Fatal("data browsers should use available space by default")
+	}
+	if defaultNode(kindRadioGroup, "radio").Name == "" {
+		t.Fatal("radio group has no state name")
+	}
+}
+
 func TestTabsCreateAndManagePages(t *testing.T) {
 	project := newProject()
 	tabs, err := project.addNear(project.mainForm().Root.ID, kindTabs)
@@ -325,6 +361,23 @@ func TestPreferencesExampleLoadsWithTabs(t *testing.T) {
 	directory := t.TempDir()
 	if _, err := generateProject(project, directory); err != nil {
 		t.Fatalf("generate preferences example: %v", err)
+	}
+	parseGeneratedGo(t, directory)
+}
+
+func TestDataBrowserExampleLoadsAndGenerates(t *testing.T) {
+	project, err := loadDesign(filepath.Join("examples", "data_browser.rosaline"))
+	if err != nil {
+		t.Fatalf("load data-browser example: %v", err)
+	}
+	for _, id := range []string{"node-6", "node-7", "node-10", "node-12"} {
+		if project.find(id) == nil {
+			t.Fatalf("data-browser example is missing %s", id)
+		}
+	}
+	directory := t.TempDir()
+	if _, err := generateProject(project, directory); err != nil {
+		t.Fatalf("generate data-browser example: %v", err)
 	}
 	parseGeneratedGo(t, directory)
 }

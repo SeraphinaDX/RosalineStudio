@@ -198,7 +198,31 @@ than a fake widget reference.
 Open `examples/preferences.rosaline` to see three pages, page-change behavior,
 and a save button working together.
 
-## 12. Keep designing safely
+## 12. Add data controls
+
+Add a **List**, **Table**, **Tree**, or **RadioGroup**, select it, and open the
+inner **Data** tab in Properties. Enter data using the help shown above the
+editor, then choose **Apply Properties**.
+
+- List: one item per line.
+- RadioGroup: one choice per line, optionally `Label = value`.
+- Table: `|` between cells; the first line contains headings.
+- Tree: one path per line with `/` between levels.
+
+The Events inspector offers selection and activation events appropriate to the
+control. Inside an event, read the current selection from its component. For
+example:
+
+```go
+if _, value, ok := app.Widgets().KindList.Selected(); ok {
+	app.Widgets().StatusLabel.SetText("Selected: " + value)
+}
+```
+
+Open `examples/data_browser.rosaline` for a complete interface combining a
+tree, table, list, radio group, tabs, and working event methods.
+
+## 13. Keep designing safely
 
 You can now add widgets, rename state fields, switch themes, or completely
 rearrange the layout. On every generation:
