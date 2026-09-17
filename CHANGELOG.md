@@ -2,6 +2,24 @@
 
 All notable Rosaline Studio changes are documented here.
 
+## v0.6.0 - 2026-09-17
+
+- Add `Tabs` to the visual widget palette with General and Advanced starter
+  pages so a useful tabbed form begins with one action.
+- Add a dedicated Pages inspector for adding, renaming, duplicating,
+  reordering, selecting, and safely deleting tab pages.
+- Make tab pages friendly containers: select a page in the preview or
+  hierarchy, then add ordinary controls directly to it.
+- Preview tab headers and only the selected page's contents while preserving
+  page selection as the designer changes controls.
+- Add `OnChange` support for Tabs through the normal Events and Code workflow.
+- Generate ordinary `rosaline.Tabs`, `rosaline.Tab`, and page `Column` calls,
+  plus a typed `*rosaline.TabsWidget` component reference.
+- Add a complete Preferences example with three designed pages and working
+  change and save events.
+- Advance the strict design schema to version 5 and automatically migrate
+  version-2 through version-4 designs.
+
 ## v0.5.0 - 2026-09-16
 
 - Add a Lazarus-style visual Menu Designer beside the Form and Code views.

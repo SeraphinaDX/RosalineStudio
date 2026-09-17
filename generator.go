@@ -188,9 +188,11 @@ func makeGenerationContext(project *designProject) *generationContext {
 			context.fieldsByID[node.ID] = field
 			context.fields = append(context.fields, field)
 		}
-		widget := generatedField{Name: node.Component, Type: widgetType(node.Kind)}
-		context.widgetsByID[node.ID] = widget
-		context.widgets = append(context.widgets, widget)
+		if node.Kind != kindTabPage {
+			widget := generatedField{Name: node.Component, Type: widgetType(node.Kind)}
+			context.widgetsByID[node.ID] = widget
+			context.widgets = append(context.widgets, widget)
+		}
 		for _, child := range node.Children {
 			visit(child)
 		}
@@ -211,6 +213,8 @@ func widgetType(kind widgetKind) string {
 		return "*rosaline.CardWidget"
 	case kindScroll:
 		return "*rosaline.ScrollWidget"
+	case kindTabs:
+		return "*rosaline.TabsWidget"
 	case kindLabel:
 		return "*rosaline.LabelWidget"
 	case kindImage:
@@ -659,6 +663,22 @@ func generateNode(node *designNode, context *generationContext, depth int) strin
 		if node.Expand {
 			expression += ".Expand()"
 		}
+	case kindTabs:
+		pages := make([]string, 0, len(node.Children))
+		for _, page := range node.Children {
+			pages = append(pages, childIndent+generateTabPage(page, context, depth+1))
+		}
+		expression = "rosaline.Tabs("
+		if len(pages) != 0 {
+			expression += "\n" + strings.Join(pages, ",\n") + ",\n" + indent
+		}
+		expression += ")"
+		if node.Expand {
+			expression += ".Expand()"
+		}
+		expression += generatedEventModifier(node, eventChange, "int, string")
+	case kindTabPage:
+		expression = "rosaline.Label(\"TabPage must be inside Tabs\")"
 	case kindLabel:
 		expression = fmt.Sprintf("rosaline.Label(%q)", node.Text)
 		if node.Bold {
@@ -758,6 +778,32 @@ func generateNode(node *designNode, context *generationContext, depth int) strin
 	field := context.widgetsByID[node.ID]
 	expression = fmt.Sprintf("rememberWidget(&generatedWidgets.%s, %s)", field.Name, expression)
 	return expression
+}
+
+func generateTabPage(page *designNode, context *generationContext, depth int) string {
+	if page == nil || page.Kind != kindTabPage {
+		return `rosaline.Tab("Page", rosaline.Label("Invalid tab page"))`
+	}
+	indent := strings.Repeat("\t", depth)
+	childIndent := strings.Repeat("\t", depth+1)
+	var content strings.Builder
+	content.WriteString("rosaline.Column(")
+	if len(page.Children) != 0 {
+		content.WriteString("\n")
+		for _, child := range page.Children {
+			content.WriteString(childIndent)
+			content.WriteString(generateNode(child, context, depth+1))
+			content.WriteString(",\n")
+		}
+		content.WriteString(indent)
+	}
+	content.WriteString(")")
+	content.WriteString(layoutModifiers(page))
+	title := strings.TrimSpace(page.Text)
+	if title == "" {
+		title = "Page"
+	}
+	return fmt.Sprintf("rosaline.Tab(%q, %s)", title, content.String())
 }
 
 func generatedEventModifier(node *designNode, event, valueType string) string {

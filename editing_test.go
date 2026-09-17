@@ -121,3 +121,21 @@ func TestCopyPasteAndDuplicateAreUndoable(t *testing.T) {
 		t.Fatal("undo did not remove the duplicated widget")
 	}
 }
+
+func TestPasteIntoTabsUsesTheActivePage(t *testing.T) {
+	studio := newStudio()
+	tabs, err := studio.project.addNear(studio.project.mainForm().Root.ID, kindTabs)
+	if err != nil {
+		t.Fatal(err)
+	}
+	active := tabs.Children[1]
+	studio.tabPages[tabs.ID] = active.ID
+	studio.selectedID = "node-1"
+	studio.copySelected()
+	studio.selectedID = tabs.ID
+	studio.pasteClipboard()
+	pasted := studio.project.find(studio.selectedID)
+	if pasted == nil || studio.project.parentOf(pasted.ID) != active {
+		t.Fatalf("pasted widget did not enter active page: %#v", pasted)
+	}
+}

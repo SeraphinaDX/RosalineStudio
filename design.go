@@ -14,7 +14,7 @@ import (
 	"unicode/utf8"
 )
 
-const designVersion = 4
+const designVersion = 5
 
 type widgetKind string
 
@@ -25,6 +25,8 @@ const (
 	kindStack       widgetKind = "Stack"
 	kindCard        widgetKind = "Card"
 	kindScroll      widgetKind = "Scroll"
+	kindTabs        widgetKind = "Tabs"
+	kindTabPage     widgetKind = "TabPage"
 	kindLabel       widgetKind = "Label"
 	kindImage       widgetKind = "Image"
 	kindButton      widgetKind = "Button"
@@ -54,6 +56,7 @@ var paletteKinds = []widgetKind{
 	kindStack,
 	kindCard,
 	kindScroll,
+	kindTabs,
 }
 
 type designNode struct {
@@ -194,6 +197,13 @@ func defaultNode(kind widgetKind, id string) *designNode {
 	case kindScroll:
 		node.Width, node.Height = 480, 300
 		node.Expand = true
+	case kindTabs:
+		node.Expand = true
+	case kindTabPage:
+		node.Text = "Page"
+		node.Padding = 12
+		node.Gap = 10
+		node.Expand = true
 	case kindLabel:
 		node.Text = "Label"
 	case kindImage:
@@ -229,7 +239,7 @@ func defaultNode(kind widgetKind, id string) *designNode {
 
 func (kind widgetKind) container() bool {
 	switch kind {
-	case kindColumn, kindRow, kindGrid, kindStack, kindCard, kindScroll:
+	case kindColumn, kindRow, kindGrid, kindStack, kindCard, kindScroll, kindTabs, kindTabPage:
 		return true
 	default:
 		return false
@@ -332,12 +342,24 @@ func (project *designProject) addNear(selectedID string, kind widgetKind) (*desi
 	if parent == nil {
 		return nil, errors.New("select a container before adding a widget")
 	}
+	if parent.Kind == kindTabs {
+		parent = firstTabPage(parent)
+		if parent == nil {
+			return nil, errors.New("add a tab page before adding a widget")
+		}
+	}
+	if err := validateWidgetContainment(parent.Kind, kind); err != nil {
+		return nil, err
+	}
 	if (parent.Kind == kindCard || parent.Kind == kindScroll) && len(parent.Children) != 0 {
 		return nil, fmt.Errorf("%s can contain one widget; select its parent instead", parent.Kind)
 	}
 	node := defaultNode(kind, project.nextID())
 	node.Component = project.nextComponentName(kind)
 	parent.Children = append(parent.Children, node)
+	if kind == kindTabs {
+		project.initializeTabs(node)
+	}
 	return node, nil
 }
 
@@ -466,6 +488,27 @@ func (project *designProject) insertCopy(selectedID string, source *designNode) 
 				break
 			}
 		}
+	}
+	if source.Kind == kindTabPage {
+		selectedPage := selected
+		if selected.Kind != kindTabPage {
+			_, selectedPage = project.tabPageContaining(selected.ID)
+		}
+		if selectedPage != nil {
+			parent = project.parentOf(selectedPage.ID)
+			for index, child := range parent.Children {
+				if child != nil && child.ID == selectedPage.ID {
+					insertIndex = index + 1
+					break
+				}
+			}
+		}
+	} else if parent.Kind == kindTabs {
+		parent = firstTabPage(parent)
+		insertIndex = len(parent.Children)
+	}
+	if err := validateWidgetContainment(parent.Kind, source.Kind); err != nil {
+		return nil, err
 	}
 	if (parent.Kind == kindCard || parent.Kind == kindScroll) && len(parent.Children) != 0 {
 		return nil, fmt.Errorf("%s can contain only one widget", parent.Kind)
@@ -691,6 +734,9 @@ func (project *designProject) remove(id string) error {
 	if parent == nil {
 		return errors.New("widget was not found")
 	}
+	if parent.Kind == kindTabs && len(parent.Children) == 1 {
+		return errors.New("Tabs must keep at least one page")
+	}
 	for index, child := range parent.Children {
 		if child != nil && child.ID == id {
 			parent.Children = append(parent.Children[:index], parent.Children[index+1:]...)
@@ -793,6 +839,16 @@ func (project *designProject) moveTo(id, targetID string) error {
 			}
 		}
 	}
+	if newParent.Kind == kindTabs && moving.Kind != kindTabPage {
+		newParent = firstTabPage(newParent)
+		if newParent == nil {
+			return errors.New("destination Tabs has no page")
+		}
+		insertIndex = len(newParent.Children)
+	}
+	if err := validateWidgetContainment(newParent.Kind, moving.Kind); err != nil {
+		return err
+	}
 	if (newParent.Kind == kindCard || newParent.Kind == kindScroll) && len(newParent.Children) != 0 && newParent != oldParent {
 		return fmt.Errorf("%s can contain only one widget", newParent.Kind)
 	}
@@ -835,8 +891,8 @@ func (project *designProject) validate() error {
 	if err := validateProjectHandlers(project); err != nil {
 		return err
 	}
-	var visit func(*designNode) error
-	visit = func(node *designNode) error {
+	var visit func(*designNode, *designNode) error
+	visit = func(node, parent *designNode) error {
 		if node == nil {
 			return errors.New("the design contains an empty widget")
 		}
@@ -854,8 +910,22 @@ func (project *designProject) validate() error {
 		if !knownKind(node.Kind) {
 			return fmt.Errorf("widget %s has unknown kind %q", node.ID, node.Kind)
 		}
+		if node.Kind == kindTabPage && parent == nil {
+			return fmt.Errorf("tab page %s must be a direct child of Tabs", node.ID)
+		}
 		if !node.Kind.container() && len(node.Children) != 0 {
 			return fmt.Errorf("%s cannot contain other widgets", node.Kind)
+		}
+		if parent != nil {
+			if err := validateWidgetContainment(parent.Kind, node.Kind); err != nil {
+				return fmt.Errorf("widget %s: %w", node.ID, err)
+			}
+		}
+		if node.Kind == kindTabs && len(node.Children) == 0 {
+			return errors.New("Tabs must contain at least one TabPage")
+		}
+		if node.Kind == kindTabPage && strings.TrimSpace(node.Text) == "" {
+			return fmt.Errorf("tab page %s has an empty title", node.ID)
 		}
 		if (node.Kind == kindCard || node.Kind == kindScroll) && len(node.Children) > 1 {
 			return fmt.Errorf("%s can contain only one widget", node.Kind)
@@ -872,7 +942,7 @@ func (project *designProject) validate() error {
 			return fmt.Errorf("widget %s has invalid asset name %q", node.ID, node.Asset)
 		}
 		for _, child := range node.Children {
-			if err := visit(child); err != nil {
+			if err := visit(child, node); err != nil {
 				return err
 			}
 		}
@@ -904,7 +974,7 @@ func (project *designProject) validate() error {
 		if err := validateDesignMenus(form.Menus, seen); err != nil {
 			return fmt.Errorf("form %s menu: %w", form.Name, err)
 		}
-		if err := visit(form.Root); err != nil {
+		if err := visit(form.Root, nil); err != nil {
 			return err
 		}
 	}
@@ -912,6 +982,9 @@ func (project *designProject) validate() error {
 }
 
 func knownKind(kind widgetKind) bool {
+	if kind == kindTabPage {
+		return true
+	}
 	for _, candidate := range paletteKinds {
 		if kind == candidate {
 			return true
@@ -966,7 +1039,7 @@ func loadDesign(path string) (*designProject, error) {
 			}},
 			Handlers: legacy.Handlers,
 		}
-	case 3, designVersion:
+	case 3, 4, designVersion:
 		if err := decodeStrict(data, &project); err != nil {
 			return nil, err
 		}

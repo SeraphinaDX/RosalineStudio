@@ -82,6 +82,36 @@ func TestPreviewHitTestingPrefersDeepestWidget(t *testing.T) {
 	}
 }
 
+func TestPreviewShowsOnlyTheActiveTabPage(t *testing.T) {
+	project := newProject()
+	root := project.mainForm().Root
+	root.Children = nil
+	tabs, err := project.addNear(root.ID, kindTabs)
+	if err != nil {
+		t.Fatal(err)
+	}
+	first, second := tabs.Children[0], tabs.Children[1]
+	firstControl, err := project.addNear(first.ID, kindLabel)
+	if err != nil {
+		t.Fatal(err)
+	}
+	secondControl, err := project.addNear(second.ID, kindButton)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	boxes := layoutPreview(project.mainForm(), map[string]string{tabs.ID: second.ID})
+	seenFirst, seenSecond, activeSecond := false, false, false
+	for _, box := range boxes {
+		seenFirst = seenFirst || box.Node.ID == firstControl.ID
+		seenSecond = seenSecond || box.Node.ID == secondControl.ID
+		activeSecond = activeSecond || box.Node.ID == second.ID && box.Active
+	}
+	if seenFirst || !seenSecond || !activeSecond {
+		t.Fatalf("active page preview is wrong: first=%v second=%v active=%v boxes=%#v", seenFirst, seenSecond, activeSecond, boxes)
+	}
+}
+
 func TestTailOutput(t *testing.T) {
 	if got := tailOutput("  short output  ", 50); got != "short output" {
 		t.Fatalf("unexpected short output: %q", got)

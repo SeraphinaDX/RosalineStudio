@@ -1,0 +1,179 @@
+{
+  "version": 5,
+  "module": "example.com/rosaline-preferences",
+  "forms": [
+    {
+      "id": "form-1",
+      "name": "MainForm",
+      "title": "Rosaline Preferences",
+      "width": 760,
+      "height": 560,
+      "padding": 16,
+      "theme": "Lavender",
+      "root": {
+        "id": "root",
+        "kind": "Column",
+        "component": "MainLayout",
+        "children": [
+          {
+            "id": "node-1",
+            "kind": "Label",
+            "component": "TitleLabel",
+            "text": "Application Preferences",
+            "bold": true
+          },
+          {
+            "id": "node-2",
+            "kind": "Label",
+            "component": "InstructionsLabel",
+            "text": "Choose a page and adjust the settings below."
+          },
+          {
+            "id": "node-3",
+            "kind": "Tabs",
+            "component": "PreferencesTabs",
+            "events": {
+              "OnChange": "PreferencesPageChanged"
+            },
+            "children": [
+              {
+                "id": "node-4",
+                "kind": "TabPage",
+                "component": "GeneralPage",
+                "text": "General",
+                "children": [
+                  {
+                    "id": "node-5",
+                    "kind": "Label",
+                    "component": "ProfileLabel",
+                    "text": "Profile"
+                  },
+                  {
+                    "id": "node-6",
+                    "kind": "TextBox",
+                    "component": "DisplayNameTextBox",
+                    "text": "Display name",
+                    "name": "DisplayName"
+                  },
+                  {
+                    "id": "node-7",
+                    "kind": "CheckBox",
+                    "component": "StartupCheckBox",
+                    "text": "Open this application when I sign in",
+                    "name": "OpenAtStartup"
+                  }
+                ],
+                "gap": 10,
+                "padding": 12,
+                "expand": true
+              },
+              {
+                "id": "node-8",
+                "kind": "TabPage",
+                "component": "AppearancePage",
+                "text": "Appearance",
+                "children": [
+                  {
+                    "id": "node-9",
+                    "kind": "Label",
+                    "component": "ThemeLabel",
+                    "text": "Color theme"
+                  },
+                  {
+                    "id": "node-10",
+                    "kind": "ComboBox",
+                    "component": "ThemeComboBox",
+                    "name": "ColorTheme",
+                    "options": [
+                      "Rosaline",
+                      "Lavender",
+                      "Midnight"
+                    ]
+                  },
+                  {
+                    "id": "node-11",
+                    "kind": "Slider",
+                    "component": "ScaleSlider",
+                    "name": "InterfaceScale",
+                    "minimum": 80,
+                    "maximum": 160,
+                    "step": 10
+                  }
+                ],
+                "gap": 10,
+                "padding": 12,
+                "expand": true
+              },
+              {
+                "id": "node-12",
+                "kind": "TabPage",
+                "component": "NotificationsPage",
+                "text": "Notifications",
+                "children": [
+                  {
+                    "id": "node-13",
+                    "kind": "CheckBox",
+                    "component": "NotificationsCheckBox",
+                    "text": "Enable desktop notifications",
+                    "name": "NotificationsEnabled"
+                  },
+                  {
+                    "id": "node-14",
+                    "kind": "Slider",
+                    "component": "VolumeSlider",
+                    "name": "NotificationVolume",
+                    "maximum": 100,
+                    "step": 5
+                  },
+                  {
+                    "id": "node-15",
+                    "kind": "ProgressBar",
+                    "component": "VolumePreview",
+                    "name": "NotificationVolume",
+                    "maximum": 100
+                  }
+                ],
+                "gap": 10,
+                "padding": 12,
+                "expand": true
+              }
+            ],
+            "expand": true
+          },
+          {
+            "id": "node-16",
+            "kind": "Row",
+            "component": "ActionRow",
+            "children": [
+              {
+                "id": "node-17",
+                "kind": "Button",
+                "component": "SaveButton",
+                "text": "Save Preferences",
+                "events": {
+                  "OnClick": "SavePreferences"
+                },
+                "primary": true
+              },
+              {
+                "id": "node-18",
+                "kind": "Label",
+                "component": "StatusLabel",
+                "text": "Ready"
+              }
+            ],
+            "gap": 10,
+            "padding": 4
+          }
+        ],
+        "gap": 10,
+        "padding": 12,
+        "expand": true
+      }
+    }
+  ],
+  "handlers": {
+    "PreferencesPageChanged": "app.Widgets().StatusLabel.SetText(\"Preferences page changed\")",
+    "SavePreferences": "app.Widgets().StatusLabel.SetText(\"Preferences saved\")\nrosaline.Message(\"Preferences\", \"Your settings were saved.\")"
+  }
+}

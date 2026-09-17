@@ -55,6 +55,8 @@ func eventSpecsFor(kind widgetKind) []eventSpec {
 		}
 	case kindTextArea, kindCheckBox, kindComboBox, kindSlider:
 		return []eventSpec{{Name: eventChange, Description: "Runs after the value changes."}}
+	case kindTabs:
+		return []eventSpec{{Name: eventChange, Description: "Runs after the selected tab page changes."}}
 	default:
 		return nil
 	}

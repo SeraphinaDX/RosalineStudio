@@ -175,6 +175,87 @@ func TestVersionThreeDesignIsUpgraded(t *testing.T) {
 	}
 }
 
+func TestVersionFourDesignIsUpgraded(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "old-v4.rosaline")
+	data := []byte(`{"version":4,"module":"example.com/old","forms":[{"id":"form-1","name":"MainForm","title":"Old","width":720,"height":520,"padding":16,"theme":"Rosaline","root":{"id":"root","kind":"Column","component":"MainLayout"}}]}`)
+	if err := os.WriteFile(path, data, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	project, err := loadDesign(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if project.Version != designVersion {
+		t.Fatalf("version-4 design was not migrated: %#v", project)
+	}
+}
+
+func TestTabsCreateAndManagePages(t *testing.T) {
+	project := newProject()
+	tabs, err := project.addNear(project.mainForm().Root.ID, kindTabs)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(tabs.Children) != 2 || tabs.Children[0].Kind != kindTabPage || tabs.Children[0].Text != "General" || tabs.Children[1].Text != "Advanced" {
+		t.Fatalf("new Tabs did not receive friendly starter pages: %#v", tabs.Children)
+	}
+	button, err := project.addNear(tabs.ID, kindButton)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if project.parentOf(button.ID) != tabs.Children[0] {
+		t.Fatal("adding a control to Tabs did not target its first page")
+	}
+	page, err := project.addTabPage(tabs, "Notifications")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if page.Text != "Notifications" || project.parentOf(page.ID) != tabs {
+		t.Fatalf("unexpected added page: %#v", page)
+	}
+	copy, err := project.duplicate(page.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if copy.Kind != kindTabPage || copy.ID == page.ID || copy.Component == page.Component {
+		t.Fatalf("tab page copy did not receive independent identity: %#v", copy)
+	}
+	if err := project.validate(); err != nil {
+		t.Fatalf("tab design is invalid: %v", err)
+	}
+}
+
+func TestTabsEnforcePageContainmentAndKeepOnePage(t *testing.T) {
+	project := newProject()
+	tabs, err := project.addNear(project.mainForm().Root.ID, kindTabs)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for len(tabs.Children) > 1 {
+		if err := project.remove(tabs.Children[len(tabs.Children)-1].ID); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := project.remove(tabs.Children[0].ID); err == nil || !strings.Contains(err.Error(), "at least one page") {
+		t.Fatalf("expected last-page deletion to fail, got %v", err)
+	}
+
+	broken := newProject()
+	broken.mainForm().Root.Children = []*designNode{{
+		ID: "tabs", Kind: kindTabs, Component: "BrokenTabs",
+		Children: []*designNode{{ID: "button", Kind: kindButton, Component: "WrongButton", Text: "Wrong"}},
+	}}
+	if err := broken.validate(); err == nil || !strings.Contains(err.Error(), "only TabPage") {
+		t.Fatalf("expected direct control in Tabs to fail validation, got %v", err)
+	}
+
+	broken = newProject()
+	broken.mainForm().Root.Children = []*designNode{{ID: "page", Kind: kindTabPage, Component: "LoosePage", Text: "Loose"}}
+	if err := broken.validate(); err == nil || !strings.Contains(err.Error(), "direct children of Tabs") {
+		t.Fatalf("expected loose TabPage to fail validation, got %v", err)
+	}
+}
+
 func TestMoveRejectsCycles(t *testing.T) {
 	project := newProject()
 	row, err := project.addNear(project.mainForm().Root.ID, kindRow)
@@ -230,6 +311,22 @@ func TestNotepadExampleLoadsWithMenus(t *testing.T) {
 	if len(project.mainForm().Menus) != 3 || findDesignMenu(project.mainForm().Menus, "menu-15") == nil {
 		t.Fatalf("notepad menus are incomplete: %#v", project.mainForm().Menus)
 	}
+}
+
+func TestPreferencesExampleLoadsWithTabs(t *testing.T) {
+	project, err := loadDesign(filepath.Join("examples", "preferences.rosaline"))
+	if err != nil {
+		t.Fatalf("load preferences example: %v", err)
+	}
+	tabs := project.find("node-3")
+	if tabs == nil || tabs.Kind != kindTabs || len(tabs.Children) != 3 {
+		t.Fatalf("preferences tabs are incomplete: %#v", tabs)
+	}
+	directory := t.TempDir()
+	if _, err := generateProject(project, directory); err != nil {
+		t.Fatalf("generate preferences example: %v", err)
+	}
+	parseGeneratedGo(t, directory)
 }
 
 func TestNewNestedLayoutsUseNaturalSize(t *testing.T) {

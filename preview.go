@@ -37,18 +37,23 @@ func (rectangle previewRect) contains(x, y float64) bool {
 }
 
 type previewBox struct {
-	Node  *designNode
-	Rect  previewRect
-	Depth int
+	Node   *designNode
+	Rect   previewRect
+	Depth  int
+	Active bool
 }
 
-func layoutPreview(form *designForm) []previewBox {
+func layoutPreview(form *designForm, selections ...map[string]string) []previewBox {
 	if form == nil || form.Root == nil {
 		return nil
 	}
 	bounds := previewContentBounds(form)
 	boxes := make([]previewBox, 0)
-	layoutPreviewNode(form.Root, bounds, 0, &boxes)
+	active := map[string]string(nil)
+	if len(selections) != 0 {
+		active = selections[0]
+	}
+	layoutPreviewNode(form.Root, bounds, 0, &boxes, active)
 	return boxes
 }
 
@@ -89,7 +94,7 @@ func previewMenuHeight(form *designForm, window previewRect) float64 {
 	return min(24.0, max(18.0, window.Height*0.045))
 }
 
-func layoutPreviewNode(node *designNode, bounds previewRect, depth int, boxes *[]previewBox) {
+func layoutPreviewNode(node *designNode, bounds previewRect, depth int, boxes *[]previewBox, active map[string]string) {
 	if node == nil {
 		return
 	}
@@ -104,21 +109,25 @@ func layoutPreviewNode(node *designNode, bounds previewRect, depth int, boxes *[
 	gap := float64(max(0, node.Gap))
 	switch node.Kind {
 	case kindRow:
-		layoutPreviewRow(node.Children, inside, gap, depth+1, boxes)
+		layoutPreviewRow(node.Children, inside, gap, depth+1, boxes, active)
 	case kindGrid:
-		layoutPreviewGrid(node, inside, gap, depth+1, boxes)
+		layoutPreviewGrid(node, inside, gap, depth+1, boxes, active)
 	case kindStack:
 		for _, child := range node.Children {
-			layoutPreviewNode(child, inside.inset(float64(depth+1)*2), depth+1, boxes)
+			layoutPreviewNode(child, inside.inset(float64(depth+1)*2), depth+1, boxes, active)
 		}
 	case kindCard, kindScroll:
-		layoutPreviewNode(node.Children[0], inside.inset(3), depth+1, boxes)
+		layoutPreviewNode(node.Children[0], inside.inset(3), depth+1, boxes, active)
+	case kindTabs:
+		layoutPreviewTabs(node, inside, depth+1, boxes, active)
+	case kindTabPage:
+		layoutPreviewColumn(node.Children, inside, gap, depth+1, boxes, active)
 	default:
-		layoutPreviewColumn(node.Children, inside, gap, depth+1, boxes)
+		layoutPreviewColumn(node.Children, inside, gap, depth+1, boxes, active)
 	}
 }
 
-func layoutPreviewColumn(children []*designNode, bounds previewRect, gap float64, depth int, boxes *[]previewBox) {
+func layoutPreviewColumn(children []*designNode, bounds previewRect, gap float64, depth int, boxes *[]previewBox, active map[string]string) {
 	if len(children) == 0 {
 		return
 	}
@@ -126,12 +135,12 @@ func layoutPreviewColumn(children []*designNode, bounds previewRect, gap float64
 	y := bounds.Y
 	for index, child := range children {
 		height := sizes[index]
-		layoutPreviewNode(child, previewRect{X: bounds.X, Y: y, Width: bounds.Width, Height: height}, depth, boxes)
+		layoutPreviewNode(child, previewRect{X: bounds.X, Y: y, Width: bounds.Width, Height: height}, depth, boxes, active)
 		y += height + gap
 	}
 }
 
-func layoutPreviewRow(children []*designNode, bounds previewRect, gap float64, depth int, boxes *[]previewBox) {
+func layoutPreviewRow(children []*designNode, bounds previewRect, gap float64, depth int, boxes *[]previewBox, active map[string]string) {
 	if len(children) == 0 {
 		return
 	}
@@ -139,7 +148,7 @@ func layoutPreviewRow(children []*designNode, bounds previewRect, gap float64, d
 	x := bounds.X
 	for index, child := range children {
 		width := sizes[index]
-		layoutPreviewNode(child, previewRect{X: x, Y: bounds.Y, Width: width, Height: bounds.Height}, depth, boxes)
+		layoutPreviewNode(child, previewRect{X: x, Y: bounds.Y, Width: width, Height: bounds.Height}, depth, boxes, active)
 		x += width + gap
 	}
 }
@@ -171,7 +180,7 @@ func previewLinearSizes(children []*designNode, available float64, horizontal bo
 	return sizes
 }
 
-func layoutPreviewGrid(node *designNode, bounds previewRect, gap float64, depth int, boxes *[]previewBox) {
+func layoutPreviewGrid(node *designNode, bounds previewRect, gap float64, depth int, boxes *[]previewBox, active map[string]string) {
 	columns := max(1, node.Columns)
 	rows := (len(node.Children) + columns - 1) / columns
 	if rows == 0 {
@@ -212,8 +221,56 @@ func layoutPreviewGrid(node *designNode, bounds previewRect, gap float64, depth 
 			Width:  cellWidth,
 			Height: rowHeights[row],
 		}
-		layoutPreviewNode(child, rectangle, depth, boxes)
+		layoutPreviewNode(child, rectangle, depth, boxes, active)
 	}
+}
+
+func layoutPreviewTabs(tabs *designNode, bounds previewRect, depth int, boxes *[]previewBox, active map[string]string) {
+	if tabs == nil || len(tabs.Children) == 0 {
+		return
+	}
+	headerHeight := min(32.0, max(24.0, bounds.Height*0.12))
+	widths := make([]float64, len(tabs.Children))
+	total := 0.0
+	for index, page := range tabs.Children {
+		widths[index] = min(180, max(72, float64(len([]rune(defaultText(page.Text, "Page")))*7+26)))
+		total += widths[index]
+	}
+	if total > bounds.Width && total > 0 {
+		scale := bounds.Width / total
+		for index := range widths {
+			widths[index] = max(1, widths[index]*scale)
+		}
+	}
+	activeID := ""
+	if active != nil {
+		activeID = active[tabs.ID]
+	}
+	if tabPageIndex(tabs, activeID) < 0 && tabs.Children[0] != nil {
+		activeID = tabs.Children[0].ID
+	}
+	x := bounds.X
+	var page *designNode
+	for index, candidate := range tabs.Children {
+		if candidate == nil {
+			continue
+		}
+		isActive := candidate.ID == activeID
+		*boxes = append(*boxes, previewBox{
+			Node: candidate, Rect: previewRect{X: x, Y: bounds.Y, Width: widths[index], Height: headerHeight},
+			Depth: depth, Active: isActive,
+		})
+		if isActive {
+			page = candidate
+		}
+		x += widths[index]
+	}
+	if page == nil {
+		return
+	}
+	content := previewRect{X: bounds.X, Y: bounds.Y + headerHeight, Width: bounds.Width, Height: max(1, bounds.Height-headerHeight)}
+	content = content.inset(float64(max(0, page.Padding)) + 5)
+	layoutPreviewColumn(page.Children, content, float64(max(0, page.Gap)), depth+1, boxes, active)
 }
 
 func previewNaturalSize(node *designNode, horizontal bool) float64 {
@@ -236,7 +293,7 @@ func previewNaturalSize(node *designNode, horizontal bool) float64 {
 			return min(240, max(130, float64(len([]rune(node.Text))*7+42)))
 		case kindSpacer:
 			return 24
-		case kindColumn, kindRow, kindGrid, kindStack, kindCard, kindScroll:
+		case kindColumn, kindRow, kindGrid, kindStack, kindCard, kindScroll, kindTabs, kindTabPage:
 			return 220
 		default:
 			return 180
@@ -251,9 +308,9 @@ func previewNaturalSize(node *designNode, horizontal bool) float64 {
 		return 110
 	case kindImage:
 		return 160
-	case kindScroll:
+	case kindScroll, kindTabs:
 		return 180
-	case kindColumn, kindRow, kindGrid, kindStack, kindCard:
+	case kindColumn, kindRow, kindGrid, kindStack, kindCard, kindTabPage:
 		return previewNaturalContainerHeight(node)
 	case kindSpacer:
 		return 24
@@ -292,6 +349,8 @@ func previewNaturalContainerHeight(node *designNode) float64 {
 		return min(300, max(48, height+gap*float64(max(0, rows-1))+padding))
 	case kindCard:
 		return min(300, previewNaturalSize(node.Children[0], false)+padding)
+	case kindTabs:
+		return 190
 	default:
 		height := gap * float64(max(0, len(node.Children)-1))
 		for _, child := range node.Children {
@@ -420,6 +479,18 @@ func drawPreviewNode(canvas *rosaline.DrawingCanvas, box previewBox, colors prev
 		canvas.FillRect(rectangle.X, rectangle.Y, rectangle.Width, rectangle.Height, colors.surface)
 		canvas.Rect(rectangle.X, rectangle.Y, rectangle.Width, rectangle.Height, strokeFor(selected), outline)
 		canvas.FillRect(rectangle.X+rectangle.Width-8, rectangle.Y+4, 4, rectangle.Height-8, colors.border)
+	case kindTabs:
+		canvas.FillRect(rectangle.X, rectangle.Y, rectangle.Width, rectangle.Height, colors.surface)
+		canvas.Rect(rectangle.X, rectangle.Y, rectangle.Width, rectangle.Height, strokeFor(selected), outline)
+	case kindTabPage:
+		fill := colors.surface
+		text := colors.text
+		if box.Active {
+			fill, text = colors.primary, rosaline.White
+		}
+		canvas.FillRect(rectangle.X+1, rectangle.Y+1, rectangle.Width-2, rectangle.Height-1, fill)
+		canvas.Rect(rectangle.X, rectangle.Y, rectangle.Width, rectangle.Height, strokeFor(selected), outline)
+		canvas.Text(defaultText(node.Text, "Page"), rectangle.X+9, rectangle.Y+max(5, rectangle.Height/2-7), rosaline.TextStyle{Color: text, Size: 10})
 	case kindLabel:
 		canvas.Text(defaultText(node.Text, "Label"), rectangle.X+5, rectangle.Y+max(4, rectangle.Height/2-7), rosaline.TextStyle{Color: colors.text, Size: fontSizeFor(rectangle)})
 		if selected {
@@ -516,6 +587,9 @@ func defaultText(value, fallback string) string {
 func previewDescription(node *designNode) string {
 	if node == nil {
 		return "No widget selected"
+	}
+	if node.Kind == kindTabPage {
+		return fmt.Sprintf("%s - TabPage - %s", node.Component, defaultText(node.Text, "Page"))
 	}
 	return fmt.Sprintf("%s - %s", node.Component, node.Kind)
 }

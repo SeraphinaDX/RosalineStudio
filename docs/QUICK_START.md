@@ -20,7 +20,7 @@ Continue button.
   for the selected form.
 - The center switches between the visual Form, Menus, and integrated Go Code
   views.
-- The right inspector has Properties, Events, Menu, and Form tabs.
+- The right inspector has Properties, Events, Pages, Menu, and Form tabs.
 
 Double-clicking a palette item adds it to the selected container. If a control
 is selected, Studio adds the new widget to that control's parent container.
@@ -177,7 +177,28 @@ Studio copies the picture into `greeting.assets/`. During generation it copies
 and embeds the asset in the Go application, so the compiled program can find
 the picture regardless of its working directory.
 
-## 11. Keep designing safely
+## 11. Add a tabbed settings area
+
+1. Select the root layout and add **Tabs** from the palette. Studio creates
+   General and Advanced pages automatically.
+2. Click **General** in the form preview and add a TextBox or CheckBox. Controls
+   added while Tabs is selected also go to its currently displayed page.
+3. Open the right **Pages** inspector. Rename the page, add another page, or
+   duplicate a page and everything inside it.
+4. Use **Move Left** and **Move Right** to change header order. Studio will not
+   let you delete the final page.
+5. Select the Tabs component, open **Events**, and assign `OnChange` if the
+   application should react when its user chooses another page.
+
+The generated source uses normal `rosaline.Tabs`, `rosaline.Tab`, and
+`rosaline.Column` calls. `app.Widgets().PreferencesTabs` exposes the runtime
+Tabs component, while a `TabPage` remains a structural designer entry rather
+than a fake widget reference.
+
+Open `examples/preferences.rosaline` to see three pages, page-change behavior,
+and a save button working together.
+
+## 12. Keep designing safely
 
 You can now add widgets, rename state fields, switch themes, or completely
 rearrange the layout. On every generation:
