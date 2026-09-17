@@ -48,6 +48,18 @@ type projectInspectorState struct {
 	Theme   string
 }
 
+type menuInspectorState struct {
+	Caption  string
+	Shortcut string
+	Handler  string
+}
+
+const (
+	workspaceFormTab = iota
+	workspaceMenuTab
+	workspaceCodeTab
+)
+
 type studio struct {
 	project    *designProject
 	path       string
@@ -58,6 +70,7 @@ type studio struct {
 
 	inspector inspectorState
 	settings  projectInspectorState
+	menu      menuInspectorState
 
 	palette    *rosaline.ListWidget
 	formList   *rosaline.ListWidget
@@ -66,10 +79,14 @@ type studio struct {
 	tree       *rosaline.TreeWidget
 	canvas     *rosaline.CanvasWidget
 	workspace  *rosaline.TabsWidget
+	menuTree   *rosaline.TreeWidget
 	codeEditor *rosaline.TextAreaWidget
 	eventList  *rosaline.ListWidget
 	treeByID   map[string]*rosaline.TreeNode
+	menuByID   map[string]*rosaline.TreeNode
 	syncTree   bool
+	syncMenu   bool
+	menuID     string
 	dragID     string
 
 	availableEvents []eventSpec
@@ -188,6 +205,19 @@ func (studio *studio) run() {
 		studio.editSelectedEvent()
 	})
 	studio.codeEditor = rosaline.TextArea(&studio.codeBody).Size(72, 28).Expand()
+	studio.menuTree = rosaline.Tree().Width(620).Height(24).Expand()
+	studio.menuTree.OnSelect(func(node *rosaline.TreeNode) {
+		if studio.syncMenu || node == nil {
+			return
+		}
+		studio.selectMenu(node.Value())
+	}).OnActivate(func(node *rosaline.TreeNode) {
+		if node == nil {
+			return
+		}
+		studio.selectMenu(node.Value())
+		studio.editMenuHandler()
+	})
 	studio.loadEvents()
 
 	studio.runTask = rosaline.Background(func(ctx context.Context, report *rosaline.TaskReporter) error {
@@ -255,6 +285,7 @@ func (studio *studio) run() {
 
 	studio.rebuildForms()
 	studio.rebuildTree()
+	studio.rebuildMenuTree()
 
 	menu := rosaline.MenuBar(
 		rosaline.Menu("File",
@@ -286,6 +317,8 @@ func (studio *studio) run() {
 			rosaline.MenuItem("New Form", studio.addForm),
 			rosaline.MenuItem("Duplicate Form", studio.duplicateForm),
 			rosaline.MenuItem("Delete Form", studio.deleteForm),
+			rosaline.MenuSeparator(),
+			rosaline.MenuItem("Menu Designer", studio.showMenuDesigner),
 		),
 		rosaline.Menu("Help",
 			rosaline.MenuItem("Quick Help", studio.showHelp).Shortcut("F1"),
@@ -357,6 +390,7 @@ func (studio *studio) selectForm(id string) {
 	}
 	studio.formID = form.ID
 	studio.selectedID = form.Root.ID
+	studio.menuID = ""
 	studio.loadProjectInspector()
 	studio.refreshDesign()
 	studio.status = "Editing " + form.Name
@@ -420,8 +454,27 @@ func (studio *studio) buildWorkspace() rosaline.Widget {
 			rosaline.Button("Back to Form", studio.showDesigner),
 		).Gap(8),
 	).Gap(8).Expand()
+	menus := rosaline.Column(
+		rosaline.Row(
+			rosaline.LabelFunc(studio.selectedMenuLabel).Bold(),
+			rosaline.Spring(),
+			rosaline.Button("Add Top Menu", studio.addTopMenu),
+		).Gap(6),
+		studio.menuTree,
+		rosaline.Row(
+			rosaline.Button("Add Item", func() { studio.addMenuEntry(menuKindItem) }).Primary(),
+			rosaline.Button("Add Submenu", func() { studio.addMenuEntry(menuKindMenu) }),
+			rosaline.Button("Add Separator", func() { studio.addMenuEntry(menuKindSeparator) }),
+			rosaline.Spring(),
+			rosaline.Button("Up", func() { studio.moveMenuEntry(-1) }),
+			rosaline.Button("Down", func() { studio.moveMenuEntry(1) }),
+			rosaline.Button("Delete", studio.deleteMenuEntry),
+		).Gap(6),
+		rosaline.Label("Top-level menus become the window menu bar. Double-click an item to edit its click code.").Color(rosaline.DefaultTheme.Muted),
+	).Gap(8).Expand()
 	studio.workspace = rosaline.Tabs(
 		rosaline.Tab("Form", form),
+		rosaline.Tab("Menus", menus),
 		rosaline.Tab("Code", code),
 	).Expand()
 	return rosaline.Card(studio.workspace).Padding(5).Expand()
@@ -505,9 +558,24 @@ func (studio *studio) buildInspectorPanel() rosaline.Widget {
 		rosaline.Label("Double-click a form control to edit its default event.").Color(rosaline.DefaultTheme.Muted),
 	).Gap(8)
 
+	menuPanel := rosaline.Column(
+		rosaline.LabelFunc(studio.selectedMenuLabel).Bold(),
+		inspectorField("Caption", rosaline.TextBox(&studio.menu.Caption).Width(24)),
+		inspectorField("Shortcut", rosaline.TextBox(&studio.menu.Shortcut).Width(24)),
+		rosaline.Label("Examples: Primary+S, Primary+Shift+Z, F5").Color(rosaline.DefaultTheme.Muted),
+		inspectorField("Click handler", rosaline.TextBox(&studio.menu.Handler).Width(24)),
+		compactInspectorWidget(rosaline.Button("Apply Menu Properties", studio.applyMenuInspector).Primary()),
+		rosaline.Row(
+			rosaline.Button("Assign and Edit Click", studio.editMenuHandler).Primary(),
+			rosaline.Button("Clear Click", studio.clearMenuHandler),
+		).Gap(6),
+		rosaline.Label("Captions apply to menus and items. Shortcuts and click handlers apply to items.").Color(rosaline.DefaultTheme.Muted),
+	).Gap(8)
+
 	return rosaline.Tabs(
 		rosaline.Tab("Properties", widgetPanel),
 		rosaline.Tab("Events", eventPanel),
+		rosaline.Tab("Menu", menuPanel),
 		rosaline.Tab("Form", projectPanel),
 	).Expand()
 }
@@ -693,7 +761,7 @@ func (studio *studio) editSelectedEvent() {
 	studio.codeEditor.SetText(studio.codeBody)
 	studio.codeEditor.MarkSaved()
 	if studio.workspace != nil {
-		studio.workspace.Select(1)
+		studio.workspace.Select(workspaceCodeTab)
 	}
 	studio.codeEditor.Focus()
 	studio.status = "Editing " + handler
@@ -756,7 +824,7 @@ func (studio *studio) showDesigner() {
 		return
 	}
 	if studio.workspace != nil {
-		studio.workspace.Select(0)
+		studio.workspace.Select(workspaceFormTab)
 	}
 	studio.canvas.Focus()
 }
@@ -843,6 +911,7 @@ func (studio *studio) addForm() {
 	form := studio.project.addForm()
 	studio.formID = form.ID
 	studio.selectedID = form.Root.ID
+	studio.menuID = ""
 	studio.commitChange(before, "Added "+form.Name)
 }
 
@@ -855,6 +924,7 @@ func (studio *studio) duplicateForm() {
 	}
 	studio.formID = form.ID
 	studio.selectedID = form.Root.ID
+	studio.menuID = ""
 	studio.commitChange(before, "Duplicated form as "+form.Name)
 }
 
@@ -876,6 +946,7 @@ func (studio *studio) deleteForm() {
 	main := studio.project.mainForm()
 	studio.formID = main.ID
 	studio.selectedID = main.Root.ID
+	studio.menuID = ""
 	studio.commitChange(before, "Deleted "+form.Name+" - use Primary+Z to undo")
 }
 
@@ -1178,8 +1249,11 @@ func (studio *studio) refreshDesign() {
 	studio.loadInspector()
 	studio.loadEvents()
 	studio.loadProjectInspector()
+	studio.ensureMenuSelection()
+	studio.loadMenuInspector()
 	studio.rebuildForms()
 	studio.rebuildTree()
+	studio.rebuildMenuTree()
 	if studio.canvas != nil {
 		studio.canvas.Redraw()
 	}
@@ -1312,6 +1386,7 @@ func (studio *studio) newDesign() {
 	main := studio.project.mainForm()
 	studio.formID = main.ID
 	studio.selectedID = main.Root.ID
+	studio.menuID = ""
 	studio.undo, studio.redo = nil, nil
 	studio.clipboard = nil
 	studio.dirty = false
@@ -1351,6 +1426,7 @@ func (studio *studio) openDesign() {
 	main := project.mainForm()
 	studio.formID = main.ID
 	studio.selectedID = main.Root.ID
+	studio.menuID = ""
 	studio.undo, studio.redo = nil, nil
 	studio.clipboard = nil
 	studio.dirty = false
@@ -1496,7 +1572,7 @@ func (studio *studio) documentName() string {
 func (studio *studio) showHelp() {
 	rosaline.Message(
 		"Rosaline Studio Quick Help",
-		"1. Select or create a form in Project Forms.\n2. Select a container and double-click a palette item to add it.\n3. Give controls memorable component names in Properties.\n4. Right-click to cut, copy, paste, duplicate, or delete widgets.\n5. Use Events to assign a handler, or double-click a form control.\n6. Select a form's root layout to edit OnOpen, OnCloseRequest, and OnClose.\n7. Write event code with app.Widgets().Name and app.Windows().FormName.\n8. Press F5 to generate and run.\n\nStudio never overwrites handlers.go, main.go, go.mod, or README.md.",
+		"1. Select or create a form in Project Forms.\n2. Select a container and double-click a palette item to add it.\n3. Give controls memorable component names in Properties.\n4. Right-click to cut, copy, paste, duplicate, or delete widgets.\n5. Use Events to assign a handler, or double-click a form control.\n6. Open Menus to build the form's menu bar and edit item click handlers.\n7. Select a form's root layout to edit OnOpen, OnCloseRequest, and OnClose.\n8. Write event code with app.Widgets().Name and app.Windows().FormName.\n9. Press F5 to generate and run.\n\nStudio never overwrites handlers.go, main.go, go.mod, or README.md.",
 	)
 	studio.canvas.Focus()
 }
@@ -1504,7 +1580,7 @@ func (studio *studio) showHelp() {
 func (studio *studio) showAbout() {
 	rosaline.Message(
 		"About Rosaline Studio",
-		"Rosaline Studio v0.4.0\n\nA pure-Go Lazarus-style RAD environment built with Rosaline.\n\nGenerated code remains normal, readable Rosaline Go.",
+		"Rosaline Studio v0.5.0\n\nA pure-Go Lazarus-style RAD environment built with Rosaline.\n\nGenerated code remains normal, readable Rosaline Go.",
 	)
 	studio.canvas.Focus()
 }

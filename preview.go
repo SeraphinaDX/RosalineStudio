@@ -73,12 +73,20 @@ func previewWindowBounds(form *designForm) previewRect {
 func previewContentBounds(form *designForm) previewRect {
 	window := previewWindowBounds(form)
 	titleHeight := min(30.0, max(22.0, window.Height*0.065))
+	menuHeight := previewMenuHeight(form, window)
 	return previewRect{
 		X:      window.X + 6,
-		Y:      window.Y + titleHeight + 6,
+		Y:      window.Y + titleHeight + menuHeight + 6,
 		Width:  max(1, window.Width-12),
-		Height: max(1, window.Height-titleHeight-12),
+		Height: max(1, window.Height-titleHeight-menuHeight-12),
 	}
+}
+
+func previewMenuHeight(form *designForm, window previewRect) float64 {
+	if form == nil || len(form.Menus) == 0 {
+		return 0
+	}
+	return min(24.0, max(18.0, window.Height*0.045))
 }
 
 func layoutPreviewNode(node *designNode, bounds previewRect, depth int, boxes *[]previewBox) {
@@ -362,6 +370,20 @@ func drawPreview(canvas *rosaline.DrawingCanvas, form *designForm, boxes []previ
 	canvas.Text(form.Title, window.X+10, window.Y+6, rosaline.TextStyle{Color: rosaline.White, Size: 12})
 	resolution := fmt.Sprintf("%d x %d", form.Width, form.Height)
 	canvas.Text(resolution, window.X+window.Width-float64(len(resolution)*7)-10, window.Y+6, rosaline.TextStyle{Color: rosaline.White, Size: 11})
+	menuHeight := previewMenuHeight(form, window)
+	if menuHeight > 0 {
+		menuY := window.Y + titleHeight
+		canvas.FillRect(window.X, menuY, window.Width, menuHeight, colors.surface)
+		canvas.Line(window.X, menuY+menuHeight, window.X+window.Width, menuY+menuHeight, 1, colors.border)
+		x := window.X + 9
+		for _, menu := range form.Menus {
+			if menu == nil {
+				continue
+			}
+			canvas.Text(menu.Text, x, menuY+4, rosaline.TextStyle{Color: colors.text, Size: 10})
+			x += float64(len(menu.Text)*7 + 20)
+		}
+	}
 	content := previewContentBounds(form)
 	canvas.FillRect(content.X, content.Y, content.Width, content.Height, colors.background)
 

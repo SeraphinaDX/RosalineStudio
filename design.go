@@ -14,7 +14,7 @@ import (
 	"unicode/utf8"
 )
 
-const designVersion = 3
+const designVersion = 4
 
 type widgetKind string
 
@@ -98,6 +98,7 @@ type designForm struct {
 	Theme   string            `json:"theme"`
 	Root    *designNode       `json:"root"`
 	Events  map[string]string `json:"events,omitempty"`
+	Menus   []*designMenu     `json:"menus,omitempty"`
 }
 
 type legacyDesignProject struct {
@@ -393,7 +394,9 @@ func (project *designProject) duplicateForm(id string) (*designForm, error) {
 	clone.Title = source.Title + " Copy"
 	clone.Root = cloneDesignNode(source.Root)
 	clone.Events = cloneStringMap(source.Events)
+	clone.Menus = cloneDesignMenus(source.Menus)
 	project.prepareCopiedSubtree(clone.Root)
+	project.prepareCopiedMenus(clone.Menus)
 	project.Forms = append(project.Forms, &clone)
 	return &clone, nil
 }
@@ -898,6 +901,9 @@ func (project *designProject) validate() error {
 				return fmt.Errorf("form %s has invalid handler name %q", form.Name, handler)
 			}
 		}
+		if err := validateDesignMenus(form.Menus, seen); err != nil {
+			return fmt.Errorf("form %s menu: %w", form.Name, err)
+		}
 		if err := visit(form.Root); err != nil {
 			return err
 		}
@@ -960,10 +966,11 @@ func loadDesign(path string) (*designProject, error) {
 			}},
 			Handlers: legacy.Handlers,
 		}
-	case designVersion:
+	case 3, designVersion:
 		if err := decodeStrict(data, &project); err != nil {
 			return nil, err
 		}
+		project.Version = designVersion
 	default:
 		return nil, fmt.Errorf("unsupported design version %d", header.Version)
 	}
