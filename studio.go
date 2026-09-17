@@ -71,6 +71,7 @@ type studio struct {
 	inspector inspectorState
 	settings  projectInspectorState
 	menu      menuInspectorState
+	pageTitle string
 
 	palette    *rosaline.ListWidget
 	formList   *rosaline.ListWidget
@@ -87,6 +88,7 @@ type studio struct {
 	syncTree   bool
 	syncMenu   bool
 	menuID     string
+	tabPages   map[string]string
 	dragID     string
 
 	availableEvents []eventSpec
@@ -117,6 +119,7 @@ func newStudio() *studio {
 		status:          "Ready - double-click a palette item to add it",
 		selectedEvent:   -1,
 		previewPictures: make(map[string]*rosaline.Picture),
+		tabPages:        make(map[string]string),
 	}
 	result.loadInspector()
 	result.loadProjectInspector()
@@ -155,13 +158,13 @@ func (studio *studio) run() {
 
 	studio.canvas = rosaline.Canvas(func(canvas *rosaline.DrawingCanvas) {
 		form := studio.activeForm()
-		drawPreview(canvas, form, layoutPreview(form), studio.selectedID, studio.previewPicture)
+		drawPreview(canvas, form, layoutPreview(form, studio.tabPages), studio.selectedID, studio.previewPicture)
 	}).Size(previewWidth, previewHeight).Focus()
 	studio.canvas.OnMouseDown(func(event rosaline.MouseEvent) {
 		if event.Button != rosaline.MouseLeft && event.Button != rosaline.MouseRight {
 			return
 		}
-		if node := previewBoxAt(layoutPreview(studio.activeForm()), event.X, event.Y); node != nil {
+		if node := previewBoxAt(layoutPreview(studio.activeForm(), studio.tabPages), event.X, event.Y); node != nil {
 			if event.Button == rosaline.MouseLeft {
 				studio.dragID = node.ID
 			}
@@ -174,9 +177,14 @@ func (studio *studio) run() {
 		}
 		dragged := studio.dragID
 		studio.dragID = ""
-		target := previewBoxAt(layoutPreview(studio.activeForm()), event.X, event.Y)
+		target := previewBoxAt(layoutPreview(studio.activeForm(), studio.tabPages), event.X, event.Y)
 		if target == nil || target.ID == dragged {
 			return
+		}
+		if target.Kind == kindTabs {
+			if page := studio.activeTabPage(target); page != nil {
+				target = page
+			}
 		}
 		before := designSnapshot(studio.project)
 		if err := studio.project.moveTo(dragged, target.ID); err != nil {
@@ -187,7 +195,7 @@ func (studio *studio) run() {
 	})
 	studio.canvas.OnDoubleClick(func(event rosaline.MouseEvent) {
 		studio.dragID = ""
-		node := previewBoxAt(layoutPreview(studio.activeForm()), event.X, event.Y)
+		node := previewBoxAt(layoutPreview(studio.activeForm(), studio.tabPages), event.X, event.Y)
 		if node == nil {
 			return
 		}
@@ -572,9 +580,27 @@ func (studio *studio) buildInspectorPanel() rosaline.Widget {
 		rosaline.Label("Captions apply to menus and items. Shortcuts and click handlers apply to items.").Color(rosaline.DefaultTheme.Muted),
 	).Gap(8)
 
+	pagePanel := rosaline.Column(
+		rosaline.LabelFunc(studio.selectedPageLabel).Bold(),
+		inspectorField("Page title", rosaline.TextBox(&studio.pageTitle).Width(24)),
+		compactInspectorWidget(rosaline.Button("Apply Page Title", studio.applyPageTitle).Primary()),
+		rosaline.Separator(),
+		rosaline.Row(
+			rosaline.Button("Add", studio.addTabPage),
+			rosaline.Button("Duplicate", studio.duplicateTabPage),
+		).Gap(6),
+		rosaline.Row(
+			rosaline.Button("Move Left", func() { studio.moveTabPage(-1) }),
+			rosaline.Button("Move Right", func() { studio.moveTabPage(1) }),
+		).Gap(6),
+		compactInspectorWidget(rosaline.Button("Delete Page", studio.deleteTabPage)),
+		rosaline.Label("Select a Tabs component, page, or control inside a page. Click a tab in the Form preview to display it.").Color(rosaline.DefaultTheme.Muted),
+	).Gap(8)
+
 	return rosaline.Tabs(
 		rosaline.Tab("Properties", widgetPanel),
 		rosaline.Tab("Events", eventPanel),
+		rosaline.Tab("Pages", pagePanel),
 		rosaline.Tab("Menu", menuPanel),
 		rosaline.Tab("Form", projectPanel),
 	).Expand()
@@ -597,7 +623,9 @@ func (studio *studio) selectNode(id string) {
 		return
 	}
 	studio.selectedID = id
+	studio.activateTabPageFor(id)
 	studio.loadInspector()
+	studio.loadPageInspector()
 	studio.loadEvents()
 	studio.syncTreeSelection()
 	if studio.canvas != nil {
@@ -951,13 +979,24 @@ func (studio *studio) deleteForm() {
 }
 
 func (studio *studio) addWidget(kind widgetKind) {
+	targetID := studio.selectedID
+	if node := studio.project.find(targetID); node != nil && node.Kind == kindTabs {
+		if page := studio.activeTabPage(node); page != nil {
+			targetID = page.ID
+		}
+	}
 	before := designSnapshot(studio.project)
-	node, err := studio.project.addNear(studio.selectedID, kind)
+	node, err := studio.project.addNear(targetID, kind)
 	if err != nil {
 		studio.status = "Could not add widget: " + err.Error()
 		return
 	}
 	studio.selectedID = node.ID
+	if node.Kind == kindTabs {
+		if page := firstTabPage(node); page != nil {
+			studio.tabPages[node.ID] = page.ID
+		}
+	}
 	studio.commitChange(before, "Added "+string(kind))
 }
 
@@ -993,8 +1032,14 @@ func (studio *studio) pasteClipboard() {
 		studio.status = "Copy or cut a widget before pasting"
 		return
 	}
+	targetID := studio.selectedID
+	if selected := studio.project.find(targetID); selected != nil && selected.Kind == kindTabs && studio.clipboard.Kind != kindTabPage {
+		if page := studio.activeTabPage(selected); page != nil {
+			targetID = page.ID
+		}
+	}
 	before := designSnapshot(studio.project)
-	node, err := studio.project.insertCopy(studio.selectedID, studio.clipboard)
+	node, err := studio.project.insertCopy(targetID, studio.clipboard)
 	if err != nil {
 		studio.status = "Could not paste widget: " + err.Error()
 		return
@@ -1127,6 +1172,10 @@ func (studio *studio) applyInspector() {
 		studio.status = "Another widget is already named " + component
 		return
 	}
+	if node.Kind == kindTabPage && strings.TrimSpace(studio.inspector.Text) == "" {
+		studio.status = "A tab page title cannot be empty"
+		return
+	}
 	node.Component = component
 	node.Text = studio.inspector.Text
 	node.Name = studio.inspector.Name
@@ -1219,6 +1268,7 @@ func (studio *studio) undoChange() {
 	studio.dirty = true
 	studio.status = "Undid last change"
 	studio.loadProjectInspector()
+	studio.loadPageInspector()
 	studio.refreshDesign()
 }
 
@@ -1241,12 +1291,14 @@ func (studio *studio) redoChange() {
 	studio.dirty = true
 	studio.status = "Redid change"
 	studio.loadProjectInspector()
+	studio.loadPageInspector()
 	studio.refreshDesign()
 }
 
 func (studio *studio) refreshDesign() {
 	studio.ensureSelection()
 	studio.loadInspector()
+	studio.loadPageInspector()
 	studio.loadEvents()
 	studio.loadProjectInspector()
 	studio.ensureMenuSelection()
@@ -1284,7 +1336,11 @@ func (studio *studio) rebuildTree() {
 			children = append(children, build(child))
 		}
 		label := string(node.Kind)
-		label += " - " + node.Component
+		if node.Kind == kindTabPage {
+			label += " - " + defaultText(node.Text, "Page")
+		} else {
+			label += " - " + node.Component
+		}
 		result := rosaline.Node(label, children...).WithValue(node.ID).Expanded()
 		studio.treeByID[node.ID] = result
 		return result
@@ -1393,6 +1449,7 @@ func (studio *studio) newDesign() {
 	studio.codeHandler, studio.codeBody = "", ""
 	studio.codeReturnsBool = false
 	studio.previewPictures = make(map[string]*rosaline.Picture)
+	studio.tabPages = make(map[string]string)
 	if studio.codeEditor != nil {
 		studio.codeEditor.SetText("")
 		studio.codeEditor.MarkSaved()
@@ -1433,6 +1490,7 @@ func (studio *studio) openDesign() {
 	studio.codeHandler, studio.codeBody = "", ""
 	studio.codeReturnsBool = false
 	studio.previewPictures = make(map[string]*rosaline.Picture)
+	studio.tabPages = make(map[string]string)
 	if studio.codeEditor != nil {
 		studio.codeEditor.SetText("")
 		studio.codeEditor.MarkSaved()
@@ -1572,7 +1630,7 @@ func (studio *studio) documentName() string {
 func (studio *studio) showHelp() {
 	rosaline.Message(
 		"Rosaline Studio Quick Help",
-		"1. Select or create a form in Project Forms.\n2. Select a container and double-click a palette item to add it.\n3. Give controls memorable component names in Properties.\n4. Right-click to cut, copy, paste, duplicate, or delete widgets.\n5. Use Events to assign a handler, or double-click a form control.\n6. Open Menus to build the form's menu bar and edit item click handlers.\n7. Select a form's root layout to edit OnOpen, OnCloseRequest, and OnClose.\n8. Write event code with app.Widgets().Name and app.Windows().FormName.\n9. Press F5 to generate and run.\n\nStudio never overwrites handlers.go, main.go, go.mod, or README.md.",
+		"1. Select or create a form in Project Forms.\n2. Select a container and double-click a palette item to add it.\n3. Give controls memorable component names in Properties.\n4. Right-click to cut, copy, paste, duplicate, or delete widgets.\n5. Add Tabs, click a page header, and manage pages in the Pages inspector.\n6. Use Events to assign a handler, or double-click a form control.\n7. Open Menus to build the form's menu bar and edit item click handlers.\n8. Select a form's root layout to edit OnOpen, OnCloseRequest, and OnClose.\n9. Write event code with app.Widgets().Name and app.Windows().FormName.\n10. Press F5 to generate and run.\n\nStudio never overwrites handlers.go, main.go, go.mod, or README.md.",
 	)
 	studio.canvas.Focus()
 }
@@ -1580,7 +1638,7 @@ func (studio *studio) showHelp() {
 func (studio *studio) showAbout() {
 	rosaline.Message(
 		"About Rosaline Studio",
-		"Rosaline Studio v0.5.0\n\nA pure-Go Lazarus-style RAD environment built with Rosaline.\n\nGenerated code remains normal, readable Rosaline Go.",
+		"Rosaline Studio v0.6.0\n\nA pure-Go Lazarus-style RAD environment built with Rosaline.\n\nGenerated code remains normal, readable Rosaline Go.",
 	)
 	studio.canvas.Focus()
 }

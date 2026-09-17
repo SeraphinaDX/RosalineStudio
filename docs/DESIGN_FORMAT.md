@@ -1,13 +1,13 @@
 # Rosaline design format
 
 Rosaline Studio stores visual projects as UTF-8 JSON files ending in
-`.rosaline`. The current schema version is `4`.
+`.rosaline`. The current schema version is `5`.
 
 ## Project fields
 
 | Field | Type | Meaning |
 |---|---|---|
-| `version` | integer | Design schema version; currently `4` |
+| `version` | integer | Design schema version; currently `5` |
 | `module` | string | Generated Go module path |
 | `forms` | form array | Primary form first, followed by reusable secondary forms |
 | `handlers` | object | Go event bodies keyed by handler method name |
@@ -57,12 +57,12 @@ Every widget has a globally unique internal `id`, a `kind`, and an exported Go
 | Field | Used by | Meaning |
 |---|---|---|
 | `component` | every widget | Unique generated component-reference name |
-| `text` | labels, buttons, inputs, checks | Visible text or placeholder |
+| `text` | labels, buttons, inputs, checks, tab pages | Visible text, placeholder, or page title |
 | `name` | stateful controls | Preferred generated Go state-field name |
 | `asset` | images | Safe filename in the design's `.assets` folder |
 | `events` | interactive controls | Event names mapped to Go handler methods |
 | `options` | combo boxes | Available choices |
-| `children` | layouts | Nested widgets in display order |
+| `children` | layouts, Tabs, TabPage | Nested widgets or pages in display order |
 | `gap`, `padding` | layouts | Spacing in pixels |
 | `columns` | grid | Number of equal columns |
 | `width`, `height` | widgets | Explicit size when both are positive |
@@ -81,11 +81,53 @@ State names are converted to exported Go identifiers. Duplicate names gain a
 numeric suffix. For example, `display name` and `display-name` become
 `DisplayName` and `DisplayName2`.
 
+## Tabs and tab pages
+
+A `Tabs` widget contains one or more direct `TabPage` children. A `TabPage`
+contains ordinary controls and layouts and uses `text` for its visible header.
+Tabs cannot directly contain ordinary controls, and a TabPage cannot appear
+outside Tabs. Studio always preserves at least one page.
+
+`TabPage` is structural: generated code turns it into
+`rosaline.Tab(title, rosaline.Column(...))`. It therefore has no field in
+`UIWidgets`. The parent Tabs does have a typed `*rosaline.TabsWidget` field and
+may assign an `OnChange` handler.
+
+```json
+{
+  "id": "node-3",
+  "kind": "Tabs",
+  "component": "PreferencesTabs",
+  "events": {"OnChange": "PreferencesPageChanged"},
+  "children": [
+    {
+      "id": "node-4",
+      "kind": "TabPage",
+      "component": "GeneralPage",
+      "text": "General",
+      "children": [
+        {
+          "id": "node-5",
+          "kind": "CheckBox",
+          "component": "StartupCheckBox",
+          "text": "Open at sign in",
+          "name": "OpenAtStartup"
+        }
+      ],
+      "gap": 10,
+      "padding": 12,
+      "expand": true
+    }
+  ],
+  "expand": true
+}
+```
+
 ## Example
 
 ```json
 {
-  "version": 4,
+  "version": 5,
   "module": "example.com/greeting",
   "forms": [
     {
@@ -164,9 +206,9 @@ controls, and more than one child in a `Card` or `Scroll`. It validates event
 names, handler identifiers, handler return shape, and Go syntax. Widget moves
 stay within a form, while copy and paste can safely cross forms.
 
-Studio automatically migrates version-2 single-form and version-3 multi-form
-designs to version 4; save the file to keep the upgraded structure. Version-1
-designs used a generic string action dispatcher and remain intentionally
-incompatible.
+Studio automatically migrates version-2 single-form and version-3 or version-4
+multi-form designs to version 5; save the file to keep the upgraded structure.
+Version-1 designs used a generic string action dispatcher and remain
+intentionally incompatible.
 Commit important design files to Git before opening them in a newer Studio
 version.

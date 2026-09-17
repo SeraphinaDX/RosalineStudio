@@ -133,6 +133,56 @@ func TestGeneratorCreatesNestedMenusAndClickHandlers(t *testing.T) {
 	}
 }
 
+func TestGeneratorCreatesTabsPagesAndChangeEvent(t *testing.T) {
+	project := newProject()
+	root := project.mainForm().Root
+	root.Children = nil
+	tabs, err := project.addNear(root.ID, kindTabs)
+	if err != nil {
+		t.Fatal(err)
+	}
+	tabs.Component = "PreferencesTabs"
+	tabs.Events = map[string]string{eventChange: "PreferencesPageChanged"}
+	project.Handlers["PreferencesPageChanged"] = `app.Widgets().WelcomeLabel.SetText("Page changed")`
+	label, err := project.addNear(tabs.Children[0].ID, kindLabel)
+	if err != nil {
+		t.Fatal(err)
+	}
+	label.Component = "WelcomeLabel"
+	label.Text = "Welcome"
+
+	directory := t.TempDir()
+	if _, err := generateProject(project, directory); err != nil {
+		t.Fatal(err)
+	}
+	uiData, err := os.ReadFile(filepath.Join(directory, "ui_generated.go"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	stateData, err := os.ReadFile(filepath.Join(directory, "state_generated.go"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	ui := string(uiData)
+	state := string(stateData)
+	for _, want := range []string{
+		"rosaline.Tabs(",
+		`rosaline.Tab("General", rosaline.Column(`,
+		`rosaline.Tab("Advanced", rosaline.Column().Gap(10).Padding(12).Expand())`,
+		`.OnChange(func(int, string) { app.PreferencesPageChanged() })`,
+	} {
+		if !strings.Contains(ui, want) {
+			t.Fatalf("generated tabs are missing %q:\n%s", want, ui)
+		}
+	}
+	if !strings.Contains(state, "PreferencesTabs *rosaline.TabsWidget") || !strings.Contains(state, "WelcomeLabel") || !strings.Contains(state, "*rosaline.LabelWidget") {
+		t.Fatalf("generated widget references are incomplete:\n%s", state)
+	}
+	if strings.Contains(state, "GeneralPage *") || strings.Contains(state, "AdvancedPage *") {
+		t.Fatalf("structural TabPage entries leaked into UIWidgets:\n%s", state)
+	}
+}
+
 func TestGeneratorCreatesMultipleFormsAndLifecycleEvents(t *testing.T) {
 	project := newProject()
 	main := project.mainForm()
