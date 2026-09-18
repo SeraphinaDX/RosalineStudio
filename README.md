@@ -10,7 +10,7 @@ Rosaline Studio is itself a pure-Go Rosaline application. It builds with
 
 ![Screenshot](rosaline-studio.avif)
 
-## What v0.11.0 can do
+## What v0.12.0 can do
 
 - Design a primary form and any number of reusable secondary forms
 - Create, duplicate, rename, select, configure, and delete forms from the
@@ -53,6 +53,11 @@ Rosaline Studio is itself a pure-Go Rosaline application. It builds with
 - Build without running and open compiler errors at the exact file and line
 - Import PNG, JPEG, GIF, BMP, TIFF, WebP, and AVIF pictures
 - Preview, size, and embed image assets in generated applications
+- Add a first-class Canvas with configurable size, background, expansion, and
+  keyboard focus
+- Edit typed draw, mouse, double-click, drag, and keyboard handlers visually
+- Redraw, render, and save designed canvases through typed `app.Widgets()`
+  references
 - Configure each form's title, window size, padding, and theme
 - Assign form `OnOpen`, `OnCloseRequest`, and `OnClose` methods
 - Undo and redo up to 100 design changes
@@ -108,6 +113,9 @@ viewing generated code, formatting, and following build errors.
 
 See [docs/TYPED_EVENTS.md](docs/TYPED_EVENTS.md) for every generated callback
 parameter and examples that use event values directly.
+
+See [docs/CANVAS_DESIGNER.md](docs/CANVAS_DESIGNER.md) for custom drawing,
+mouse and keyboard input, redrawing, and image export.
 
 ## The generated project
 
@@ -204,6 +212,19 @@ component in `app.Widgets()`. Open
 complete project-browser interface, and see
 [Designing data controls](docs/DATA_CONTROLS.md) for each data format and event.
 
+## Canvas designer
+
+Add **Canvas** from the palette to build drawing programs, diagrams, graphical
+editors, visualizations, and lightweight games. Its `OnDraw` method receives a
+`*rosaline.DrawingCanvas`; pointer handlers receive `rosaline.MouseEvent`, and
+keyboard handlers receive `rosaline.KeyEvent`.
+
+Studio previews the designed size and background without trying to execute Go
+inside the designer. The generated `*rosaline.CanvasWidget` reference supports
+`Redraw()` and `Picture()`, including PNG and AVIF export. Open
+[`examples/canvas_playground.rosaline`](examples/canvas_playground.rosaline)
+and see [Designing canvases](docs/CANVAS_DESIGNER.md) for the complete workflow.
+
 ## Visual menu designer
 
 Open the center **Menus** tab or choose **Project > Menu Designer**. Add a
@@ -256,13 +277,12 @@ timer and file-dialog application.
 Layouts: `Column`, `Row`, `Grid`, `Stack`, `Card`, `Scroll`, and `Tabs` with
 designer-managed `TabPage` containers.
 
-Controls: `Label`, `Image`, `Button`, `TextBox`, `TextArea`, `CheckBox`,
+Controls: `Label`, `Image`, `Canvas`, `Button`, `TextBox`, `TextArea`, `CheckBox`,
 `ComboBox`, `RadioGroup`, `List`, `Table`, `Tree`, `Slider`, `ProgressBar`, and
 `Spacer`.
 
-Rosaline has more features than the current palette. Canvases and custom
-widgets can already be added by hand to the generated project and are
-candidates for later Studio releases.
+Custom widgets can still be added by hand in developer-owned Go files when an
+application needs a control beyond the visual palette.
 
 ## Design file
 
@@ -287,11 +307,11 @@ env CGO_ENABLED=0 ROSALINE_SOURCE=../Rosaline go test ./...
 
 ## Project status
 
-Rosaline Studio v0.11.0 is an intentionally small early release. Generated code
+Rosaline Studio v0.12.0 is an intentionally small early release. Generated code
 and saved designs are designed to stay understandable while the visual tooling
 grows. The design schema is versioned, but the Studio API and file format remain
 experimental until v1.0. Studio automatically migrates version-2 through
-version-7 designs to version 8; version-1 designs remain intentionally
+version-8 designs to version 9; version-1 designs remain intentionally
 incompatible.
 
 ## License

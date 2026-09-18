@@ -14,7 +14,7 @@ import (
 	"unicode/utf8"
 )
 
-const designVersion = 8
+const designVersion = 9
 
 type widgetKind string
 
@@ -29,6 +29,7 @@ const (
 	kindTabPage     widgetKind = "TabPage"
 	kindLabel       widgetKind = "Label"
 	kindImage       widgetKind = "Image"
+	kindCanvas      widgetKind = "Canvas"
 	kindButton      widgetKind = "Button"
 	kindTextBox     widgetKind = "TextBox"
 	kindTextArea    widgetKind = "TextArea"
@@ -46,6 +47,7 @@ const (
 var paletteKinds = []widgetKind{
 	kindLabel,
 	kindImage,
+	kindCanvas,
 	kindButton,
 	kindTextBox,
 	kindTextArea,
@@ -74,6 +76,7 @@ type designNode struct {
 	Text       string            `json:"text,omitempty"`
 	Name       string            `json:"name,omitempty"`
 	Asset      string            `json:"asset,omitempty"`
+	Background string            `json:"background,omitempty"`
 	Events     map[string]string `json:"events,omitempty"`
 	Options    []string          `json:"options,omitempty"`
 	Data       []string          `json:"data,omitempty"`
@@ -92,6 +95,7 @@ type designNode struct {
 	Password   bool              `json:"password,omitempty"`
 	Vertical   bool              `json:"vertical,omitempty"`
 	Horizontal bool              `json:"horizontal,omitempty"`
+	Focus      bool              `json:"focus,omitempty"`
 }
 
 type designProject struct {
@@ -222,6 +226,9 @@ func defaultNode(kind widgetKind, id string) *designNode {
 	case kindImage:
 		node.Text = "Choose an image"
 		node.Width, node.Height = 320, 200
+	case kindCanvas:
+		node.Width, node.Height = 480, 300
+		node.Background = "#ffffff"
 	case kindButton:
 		node.Text = "Button"
 	case kindTextBox:
@@ -976,6 +983,9 @@ func (project *designProject) validate() error {
 		if node.Asset != "" && filepath.Base(node.Asset) != node.Asset {
 			return fmt.Errorf("widget %s has invalid asset name %q", node.ID, node.Asset)
 		}
+		if node.Kind == kindCanvas && !validHexColor(node.Background) {
+			return fmt.Errorf("widget %s has invalid canvas background %q", node.ID, node.Background)
+		}
 		for _, child := range node.Children {
 			if err := visit(child, node); err != nil {
 				return err
@@ -1080,7 +1090,7 @@ func loadDesign(path string) (*designProject, error) {
 			}},
 			Handlers: legacy.Handlers,
 		}
-	case 3, 4, 5, 6, 7, designVersion:
+	case 3, 4, 5, 6, 7, 8, designVersion:
 		if err := decodeStrict(data, &project); err != nil {
 			return nil, err
 		}
@@ -1094,6 +1104,15 @@ func loadDesign(path string) (*designProject, error) {
 		return nil, err
 	}
 	return &project, nil
+}
+
+func validHexColor(value string) bool {
+	value = strings.TrimPrefix(strings.TrimSpace(value), "#")
+	if len(value) != 3 && len(value) != 6 && len(value) != 8 {
+		return false
+	}
+	_, err := strconv.ParseUint(value, 16, 32)
+	return err == nil
 }
 
 func decodeStrict(data []byte, target any) error {

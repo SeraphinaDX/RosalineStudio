@@ -1,0 +1,153 @@
+{
+  "version": 9,
+  "module": "example.com/rosaline-canvas-playground",
+  "forms": [
+    {
+      "id": "form-1",
+      "name": "MainForm",
+      "title": "Rosaline Canvas Playground",
+      "width": 820,
+      "height": 680,
+      "padding": 16,
+      "theme": "Rosaline",
+      "root": {
+        "id": "root",
+        "kind": "Column",
+        "component": "MainLayout",
+        "children": [
+          {
+            "id": "node-1",
+            "kind": "Label",
+            "component": "TitleLabel",
+            "text": "Canvas Playground",
+            "bold": true
+          },
+          {
+            "id": "node-2",
+            "kind": "Label",
+            "component": "InstructionsLabel",
+            "text": "Click or drag the rose. Arrow keys move it when the canvas has focus."
+          },
+          {
+            "id": "node-3",
+            "kind": "Canvas",
+            "component": "ArtCanvas",
+            "background": "#fff7fb",
+            "events": {
+              "OnDraw": "ArtCanvasDraw",
+              "OnMouseDown": "ArtCanvasMouseDown",
+              "OnDoubleClick": "ArtCanvasDoubleClick",
+              "OnMouseMove": "ArtCanvasMouseMove",
+              "OnMouseUp": "ArtCanvasMouseUp",
+              "OnKeyDown": "ArtCanvasKeyDown"
+            },
+            "width": 640,
+            "height": 360,
+            "expand": true,
+            "focus": true
+          },
+          {
+            "id": "node-4",
+            "kind": "Grid",
+            "component": "PositionGrid",
+            "children": [
+              {
+                "id": "node-5",
+                "kind": "Label",
+                "component": "HorizontalLabel",
+                "text": "Horizontal position"
+              },
+              {
+                "id": "node-6",
+                "kind": "Slider",
+                "component": "HorizontalSlider",
+                "name": "CanvasX",
+                "events": {"OnChange": "CanvasPositionChanged"},
+                "maximum": 640,
+                "step": 1
+              },
+              {
+                "id": "node-7",
+                "kind": "Label",
+                "component": "VerticalLabel",
+                "text": "Vertical position"
+              },
+              {
+                "id": "node-8",
+                "kind": "Slider",
+                "component": "VerticalSlider",
+                "name": "CanvasY",
+                "events": {"OnChange": "CanvasPositionChanged"},
+                "maximum": 360,
+                "step": 1
+              }
+            ],
+            "gap": 8,
+            "padding": 4,
+            "columns": 2
+          },
+          {
+            "id": "node-9",
+            "kind": "Row",
+            "component": "CommandRow",
+            "children": [
+              {
+                "id": "node-10",
+                "kind": "Button",
+                "component": "CenterButton",
+                "text": "Center",
+                "events": {"OnClick": "CenterCanvas"}
+              },
+              {
+                "id": "node-11",
+                "kind": "Button",
+                "component": "SaveButton",
+                "text": "Save PNG...",
+                "events": {"OnClick": "SaveCanvasPNG"},
+                "primary": true
+              }
+            ],
+            "gap": 8
+          },
+          {
+            "id": "node-12",
+            "kind": "Label",
+            "component": "StatusLabel",
+            "text": "Ready to draw."
+          }
+        ],
+        "gap": 10,
+        "padding": 10,
+        "expand": true
+      },
+      "events": {
+        "OnOpen": "MainFormOpen"
+      },
+      "components": [
+        {
+          "id": "component-1",
+          "kind": "SaveFileDialog",
+          "name": "SavePictureDialog",
+          "title": "Save Canvas as PNG",
+          "initialFile": "canvas-picture.png",
+          "defaultExtension": ".png",
+          "filters": [
+            "PNG images | .png"
+          ]
+        }
+      ]
+    }
+  ],
+  "handlers": {
+    "ArtCanvasDoubleClick": "app.State.CanvasX = event.X\napp.State.CanvasY = event.Y\napp.Widgets().StatusLabel.SetText(\"Centered on the double-click.\")",
+    "ArtCanvasDraw": "canvas.Clear(rosaline.Hex(\"#fff7fb\"))\nfor x := 0.0; x <= 640; x += 40 {\n\tcanvas.Line(x, 0, x, 360, 1, rosaline.Hex(\"#f2dce9\"))\n}\nfor y := 0.0; y <= 360; y += 40 {\n\tcanvas.Line(0, y, 640, y, 1, rosaline.Hex(\"#f2dce9\"))\n}\ncanvas.FillCircle(app.State.CanvasX, app.State.CanvasY, 22, rosaline.Rose)\ncanvas.Circle(app.State.CanvasX, app.State.CanvasY, 29, 3, rosaline.Hex(\"#7d3156\"))\ncanvas.Text(\"Designed visually in Rosaline Studio\", 16, 16, rosaline.TextStyle{Color: rosaline.Hex(\"#7d3156\"), Size: 16})",
+    "ArtCanvasKeyDown": "switch event.Key {\ncase rosaline.KeyLeft:\n\tapp.State.CanvasX -= 5\ncase rosaline.KeyRight:\n\tapp.State.CanvasX += 5\ncase rosaline.KeyUp:\n\tapp.State.CanvasY -= 5\ncase rosaline.KeyDown:\n\tapp.State.CanvasY += 5\ndefault:\n\treturn\n}\napp.Widgets().ArtCanvas.Redraw()",
+    "ArtCanvasMouseDown": "if event.Button == rosaline.MouseLeft {\n\tapp.State.CanvasX = event.X\n\tapp.State.CanvasY = event.Y\n\tapp.Widgets().StatusLabel.SetText(\"The canvas received a mouse-down event.\")\n}",
+    "ArtCanvasMouseMove": "if event.Dragging && event.Button == rosaline.MouseLeft {\n\tapp.State.CanvasX = event.X\n\tapp.State.CanvasY = event.Y\n\tapp.Widgets().StatusLabel.SetText(\"Dragging across the canvas.\")\n}",
+    "ArtCanvasMouseUp": "if event.Button == rosaline.MouseLeft {\n\tapp.Widgets().StatusLabel.SetText(\"Finished moving the rose.\")\n}",
+    "CanvasPositionChanged": "app.Widgets().ArtCanvas.Redraw()",
+    "CenterCanvas": "app.State.CanvasX = 320\napp.State.CanvasY = 180\napp.Widgets().ArtCanvas.Redraw()\napp.Widgets().StatusLabel.SetText(\"Centered the rose.\")",
+    "MainFormOpen": "app.State.CanvasX = 320\napp.State.CanvasY = 180\napp.Widgets().ArtCanvas.Redraw()",
+    "SaveCanvasPNG": "path, ok := app.Components().SavePictureDialog.Execute()\nif !ok {\n\treturn\n}\nif err := app.Widgets().ArtCanvas.Picture().SavePNG(path); err != nil {\n\trosaline.Error(\"Could not save canvas\", err.Error())\n\treturn\n}\napp.Widgets().StatusLabel.SetText(\"Saved: \" + path)"
+  }
+}

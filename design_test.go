@@ -25,6 +25,12 @@ func TestDesignRoundTrip(t *testing.T) {
 	}
 	radio.Data = []string{"Detailed = details", "Compact = compact"}
 	radio.Horizontal = true
+	canvas, err := project.addNear(project.mainForm().Root.ID, kindCanvas)
+	if err != nil {
+		t.Fatal(err)
+	}
+	canvas.Background = "#fff0f8"
+	canvas.Focus = true
 	project.mainForm().Menus = []*designMenu{{
 		ID: "menu-1", Kind: menuKindMenu, Text: "File",
 		Children: []*designMenu{{ID: "menu-2", Kind: menuKindItem, Action: action.ID, Text: "Save"}},
@@ -314,6 +320,43 @@ func TestDataControlsHaveUsefulDefaults(t *testing.T) {
 	}
 }
 
+func TestCanvasHasUsefulDefaults(t *testing.T) {
+	canvas := defaultNode(kindCanvas, "canvas")
+	if canvas.Width != 480 || canvas.Height != 300 || canvas.Background != "#ffffff" {
+		t.Fatalf("unexpected Canvas defaults: %#v", canvas)
+	}
+	if !knownKind(kindCanvas) || kindCanvas.container() {
+		t.Fatal("Canvas must be a known leaf widget")
+	}
+}
+
+func TestVersionEightDesignIsUpgraded(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "old-v8.rosaline")
+	data := []byte(`{"version":8,"module":"example.com/old","forms":[{"id":"form-1","name":"MainForm","title":"Old","width":720,"height":520,"padding":16,"theme":"Rosaline","root":{"id":"root","kind":"Column","component":"MainLayout"}}]}`)
+	if err := os.WriteFile(path, data, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	project, err := loadDesign(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if project.Version != designVersion {
+		t.Fatalf("version-8 design was not migrated: %#v", project)
+	}
+}
+
+func TestCanvasRejectsInvalidBackground(t *testing.T) {
+	project := newProject()
+	canvas, err := project.addNear(project.mainForm().Root.ID, kindCanvas)
+	if err != nil {
+		t.Fatal(err)
+	}
+	canvas.Background = "rose"
+	if err := project.validate(); err == nil {
+		t.Fatal("Canvas accepted an invalid background color")
+	}
+}
+
 func TestTabsCreateAndManagePages(t *testing.T) {
 	project := newProject()
 	tabs, err := project.addNear(project.mainForm().Root.ID, kindTabs)
@@ -466,6 +509,22 @@ func TestDataBrowserExampleLoadsAndGenerates(t *testing.T) {
 	directory := t.TempDir()
 	if _, err := generateProject(project, directory); err != nil {
 		t.Fatalf("generate data-browser example: %v", err)
+	}
+	parseGeneratedGo(t, directory)
+}
+
+func TestCanvasPlaygroundExampleLoadsAndGenerates(t *testing.T) {
+	project, err := loadDesign(filepath.Join("examples", "canvas_playground.rosaline"))
+	if err != nil {
+		t.Fatalf("load Canvas Playground example: %v", err)
+	}
+	canvas := project.find("node-3")
+	if canvas == nil || canvas.Kind != kindCanvas || !canvas.Focus || len(canvas.Events) < 6 {
+		t.Fatalf("Canvas Playground is incomplete: %#v", canvas)
+	}
+	directory := t.TempDir()
+	if _, err := generateProject(project, directory); err != nil {
+		t.Fatalf("generate Canvas Playground example: %v", err)
 	}
 	parseGeneratedGo(t, directory)
 }

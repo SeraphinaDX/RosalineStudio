@@ -64,6 +64,11 @@ func TestHandlerCanShareIdenticalParameterSignatures(t *testing.T) {
 
 func TestEveryValueEventHasFriendlyTypedParameters(t *testing.T) {
 	want := map[widgetKind]map[string]string{
+		kindCanvas: {
+			eventDraw:      "canvas *rosaline.DrawingCanvas",
+			eventMouseDown: "event rosaline.MouseEvent",
+			eventKeyDown:   "event rosaline.KeyEvent",
+		},
 		kindTextBox:    {eventChange: "value string", eventSubmit: "value string"},
 		kindCheckBox:   {eventChange: "checked bool"},
 		kindSlider:     {eventChange: "value float64"},
@@ -80,6 +85,18 @@ func TestEveryValueEventHasFriendlyTypedParameters(t *testing.T) {
 				t.Errorf("%s.%s parameters = %q, want %q", kind, name, got, declaration)
 			}
 		}
+	}
+}
+
+func TestCanvasExposesDrawingPointerAndKeyboardEvents(t *testing.T) {
+	want := []string{eventDraw, eventMouseDown, eventDoubleClick, eventMouseMove, eventMouseUp, eventKeyDown, eventKeyUp}
+	for _, event := range want {
+		if !supportsEvent(kindCanvas, event) {
+			t.Fatalf("Canvas does not expose %s", event)
+		}
+	}
+	if got := eventSpecsFor(kindCanvas)[0].Name; got != eventDraw {
+		t.Fatalf("Canvas default event = %s, want %s", got, eventDraw)
 	}
 }
 

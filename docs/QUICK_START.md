@@ -225,7 +225,27 @@ Studio copies the picture into `greeting.assets/`. During generation it copies
 and embeds the asset in the Go application, so the compiled program can find
 the picture regardless of its working directory.
 
-## 13. Add a tabbed settings area
+## 13. Add a Canvas
+
+1. Select a container and add **Canvas** from the palette.
+2. Set its Width, Height, background color, expansion, and keyboard-focus
+   options in Properties.
+3. Open Events and assign `OnDraw`.
+4. Draw using the supplied `canvas *rosaline.DrawingCanvas` parameter:
+
+```go
+canvas.Clear(rosaline.White)
+canvas.FillCircle(120, 90, 30, rosaline.Rose)
+```
+
+Canvas mouse methods receive `event rosaline.MouseEvent`; keyboard methods
+receive `event rosaline.KeyEvent`. Call
+`app.Widgets().CanvasComponent.Redraw()` when another control changes drawing
+state. Open `examples/canvas_playground.rosaline` for an interactive example,
+and see [Canvas Designer](CANVAS_DESIGNER.md) for the complete drawing and
+input workflow.
+
+## 14. Add a tabbed settings area
 
 1. Select the root layout and add **Tabs** from the palette. Studio creates
    General and Advanced pages automatically.
@@ -246,7 +266,7 @@ than a fake widget reference.
 Open `examples/preferences.rosaline` to see three pages, page-change behavior,
 and a save button working together.
 
-## 14. Add data controls
+## 15. Add data controls
 
 Add a **List**, **Table**, **Tree**, or **RadioGroup**, select it, and open the
 inner **Data** tab in Properties. Enter data using the help shown above the
@@ -268,7 +288,7 @@ app.Widgets().StatusLabel.SetText("Selected: " + value)
 Open `examples/data_browser.rosaline` for a complete interface combining a
 tree, table, list, radio group, tabs, and working event methods.
 
-## 15. Add your own Go source
+## 16. Add your own Go source
 
 Open **Project > Project Source**. `handlers.go` opens as normal editable Go,
 while files ending in `_generated.go` remain visible but read-only.
@@ -280,7 +300,7 @@ helper function or type you want. **Save** formats and writes the active file;
 Choose **Build** to compile without launching the application. If Go reports
 an error, double-click it under Build Output to return to the exact source line.
 
-## 16. Keep designing safely
+## 17. Keep designing safely
 
 You can now add widgets, rename state fields, switch themes, or completely
 rearrange the layout. On every generation:

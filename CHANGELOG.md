@@ -2,6 +2,22 @@
 
 All notable Rosaline Studio changes are documented here.
 
+## v0.12.0 - 2026-09-18
+
+- Add Canvas as a first-class visual widget with designed size, background,
+  expansion, and initial keyboard-focus properties.
+- Preview canvases as bounded drawing surfaces without executing application Go
+  code inside Studio.
+- Add typed `OnDraw`, mouse-down, double-click, mouse-move, mouse-up, key-down,
+  and key-up methods to the normal Events and Event Code workflow.
+- Generate readable `rosaline.Canvas` construction and typed
+  `*rosaline.CanvasWidget` references supporting `Redraw()` and `Picture()`.
+- Add a Canvas Playground example combining custom drawing, dragging, keyboard
+  movement, sliders, a Save File Dialog, and PNG export.
+- Add a complete Canvas Designer guide and extend typed-event documentation.
+- Advance the strict design schema to version 9 and automatically migrate
+  version-2 through version-8 designs.
+
 ## v0.11.0 - 2026-09-18
 
 - Forward Rosaline callback values into generated application event methods

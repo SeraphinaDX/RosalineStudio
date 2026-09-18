@@ -479,6 +479,72 @@ func TestGeneratorCopiesAndEmbedsImageAssets(t *testing.T) {
 	}
 }
 
+func TestGeneratorCreatesCanvasAndTypedInputHandlers(t *testing.T) {
+	project := newProject()
+	canvas := defaultNode(kindCanvas, "canvas")
+	canvas.Component = "DrawingCanvas"
+	canvas.Width, canvas.Height = 640, 360
+	canvas.Background = "#fff0f8"
+	canvas.Expand, canvas.Focus = true, true
+	canvas.Events = map[string]string{
+		eventDraw:        "DrawingCanvasDraw",
+		eventMouseDown:   "DrawingCanvasMouseDown",
+		eventDoubleClick: "DrawingCanvasDoubleClick",
+		eventMouseMove:   "DrawingCanvasMouseMove",
+		eventMouseUp:     "DrawingCanvasMouseUp",
+		eventKeyDown:     "DrawingCanvasKeyDown",
+		eventKeyUp:       "DrawingCanvasKeyUp",
+	}
+	project.mainForm().Root.Children = []*designNode{canvas}
+	project.Handlers = map[string]string{}
+	for _, handler := range canvas.Events {
+		project.Handlers[handler] = "// Canvas event."
+	}
+	directory := t.TempDir()
+	if _, err := generateProject(project, directory); err != nil {
+		t.Fatal(err)
+	}
+	uiData, err := os.ReadFile(filepath.Join(directory, "ui_generated.go"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	stateData, err := os.ReadFile(filepath.Join(directory, "state_generated.go"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	eventsData, err := os.ReadFile(filepath.Join(directory, "events_generated.go"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	ui, state, events := string(uiData), string(stateData), string(eventsData)
+	for _, want := range []string{
+		`rosaline.Canvas(func(canvas *rosaline.DrawingCanvas) { app.DrawingCanvasDraw(canvas) }).Size(640, 360).Background(rosaline.Hex("#fff0f8")).Expand().Focus()`,
+		`.OnMouseDown(func(event rosaline.MouseEvent) { app.DrawingCanvasMouseDown(event) })`,
+		`.OnDoubleClick(func(event rosaline.MouseEvent) { app.DrawingCanvasDoubleClick(event) })`,
+		`.OnMouseMove(func(event rosaline.MouseEvent) { app.DrawingCanvasMouseMove(event) })`,
+		`.OnMouseUp(func(event rosaline.MouseEvent) { app.DrawingCanvasMouseUp(event) })`,
+		`.OnKeyDown(func(event rosaline.KeyEvent) { app.DrawingCanvasKeyDown(event) })`,
+		`.OnKeyUp(func(event rosaline.KeyEvent) { app.DrawingCanvasKeyUp(event) })`,
+	} {
+		if !strings.Contains(ui, want) {
+			t.Fatalf("generated Canvas is missing %q:\n%s", want, ui)
+		}
+	}
+	if !strings.Contains(state, "DrawingCanvas *rosaline.CanvasWidget") {
+		t.Fatalf("generated Canvas reference is missing:\n%s", state)
+	}
+	for _, want := range []string{
+		"func (app *Application) DrawingCanvasDraw(canvas *rosaline.DrawingCanvas)",
+		"func (app *Application) DrawingCanvasMouseMove(event rosaline.MouseEvent)",
+		"func (app *Application) DrawingCanvasKeyDown(event rosaline.KeyEvent)",
+	} {
+		if !strings.Contains(events, want) {
+			t.Fatalf("generated Canvas event method is missing %q:\n%s", want, events)
+		}
+	}
+	parseGeneratedGo(t, directory)
+}
+
 func TestGeneratedApplicationUsesSeparateDirectory(t *testing.T) {
 	tests := []struct {
 		designPath string
@@ -642,6 +708,15 @@ func TestGeneratedApplicationBuilds(t *testing.T) {
 		}
 		var event, handler, body string
 		switch kind {
+		case kindCanvas:
+			node.Events = map[string]string{
+				eventDraw:      "CanvasDraw",
+				eventMouseMove: "CanvasMouseMove",
+				eventKeyDown:   "CanvasKeyDown",
+			}
+			project.Handlers["CanvasDraw"] = "_ = canvas"
+			project.Handlers["CanvasMouseMove"] = "_ = event"
+			project.Handlers["CanvasKeyDown"] = "_ = event"
 		case kindTextBox, kindTextArea, kindComboBox, kindRadioGroup, kindSlider:
 			event, handler, body = eventChange, exportedIdentifier(string(kind))+"Changed", "_ = value"
 		case kindCheckBox:
@@ -663,12 +738,37 @@ func TestGeneratedApplicationBuilds(t *testing.T) {
 	if _, err := generateProject(project, directory); err != nil {
 		t.Fatal(err)
 	}
+	buildGeneratedApplication(t, directory, absSource)
+}
+
+func TestGeneratedCanvasExampleBuilds(t *testing.T) {
+	rosalineSource := os.Getenv("ROSALINE_SOURCE")
+	if rosalineSource == "" {
+		t.Skip("set ROSALINE_SOURCE to run the generated-application build test")
+	}
+	absSource, err := filepath.Abs(rosalineSource)
+	if err != nil {
+		t.Fatal(err)
+	}
+	project, err := loadDesign(filepath.Join("examples", "canvas_playground.rosaline"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	directory := t.TempDir()
+	if _, err := generateProject(project, directory); err != nil {
+		t.Fatal(err)
+	}
+	buildGeneratedApplication(t, directory, absSource)
+}
+
+func buildGeneratedApplication(t *testing.T, directory, rosalineSource string) {
+	t.Helper()
 	modPath := filepath.Join(directory, "go.mod")
 	modData, err := os.ReadFile(modPath)
 	if err != nil {
 		t.Fatal(err)
 	}
-	modData = append(modData, []byte("\nreplace "+rosalineModule+" => "+filepath.ToSlash(absSource)+"\n")...)
+	modData = append(modData, []byte("\nreplace "+rosalineModule+" => "+filepath.ToSlash(rosalineSource)+"\n")...)
 	if err := os.WriteFile(modPath, modData, 0o644); err != nil {
 		t.Fatal(err)
 	}
