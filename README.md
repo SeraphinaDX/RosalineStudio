@@ -10,7 +10,7 @@ Rosaline Studio is itself a pure-Go Rosaline application. It builds with
 
 ![Screenshot](rosaline-studio.avif)
 
-## What v0.10.0 can do
+## What v0.11.0 can do
 
 - Design a primary form and any number of reusable secondary forms
 - Create, duplicate, rename, select, configure, and delete forms from the
@@ -42,6 +42,8 @@ Rosaline Studio is itself a pure-Go Rosaline application. It builds with
 - Enter realistic control data through a simple multiline Data inspector
 - Edit text, state names, sizing, spacing, and common options
 - Assign `OnClick`, `OnChange`, and `OnSubmit` methods in the Events inspector
+- Receive friendly typed event parameters such as `value`, `row`, `node`, and
+  `expanded` directly in generated application methods
 - Double-click a form control to create or edit its default event
 - Write event bodies in the integrated Go editor with syntax validation
 - Browse the complete generated project in a Lazarus-style Project Files tree
@@ -104,6 +106,9 @@ walkthrough.
 See [docs/SOURCE_EDITOR.md](docs/SOURCE_EDITOR.md) for editing handwritten Go,
 viewing generated code, formatting, and following build errors.
 
+See [docs/TYPED_EVENTS.md](docs/TYPED_EVENTS.md) for every generated callback
+parameter and examples that use event values directly.
+
 ## The generated project
 
 Each design generates into a separate folder beside its `.rosaline` file. A
@@ -128,6 +133,15 @@ Each event calls a normal named Go method:
 ```go
 func (app *Application) SaveClick() {
 	rosaline.Message("Saved", "Your application handled OnClick.")
+}
+```
+
+Events carrying data receive normal named Go parameters. For example, a List
+selection method receives the selected index and value directly:
+
+```go
+func (app *Application) KindSelected(index int, value string) {
+	app.Widgets().StatusLabel.SetText(value)
 }
 ```
 
@@ -273,7 +287,7 @@ env CGO_ENABLED=0 ROSALINE_SOURCE=../Rosaline go test ./...
 
 ## Project status
 
-Rosaline Studio v0.10.0 is an intentionally small early release. Generated code
+Rosaline Studio v0.11.0 is an intentionally small early release. Generated code
 and saved designs are designed to stay understandable while the visual tooling
 grows. The design schema is versioned, but the Studio API and file format remain
 experimental until v1.0. Studio automatically migrates version-2 through

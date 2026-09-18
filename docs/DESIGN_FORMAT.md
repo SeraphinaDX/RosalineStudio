@@ -35,7 +35,9 @@ by the primary form.
 
 `OnCloseRequest` is the one boolean event. Its handler must return `true` to
 allow the close or `false` to keep the form open. Other form and widget event
-handlers do not return a value.
+handlers do not return a value. Widget event method parameters are derived from
+the widget kind and event name rather than duplicated in the JSON. For example,
+a List `OnSelect` handler receives `index int, value string`.
 
 ## Menu fields
 
@@ -317,8 +319,9 @@ string named by `name` and support `OnChange`.
 Studio rejects unknown JSON fields, unknown widget kinds, repeated form or
 widget IDs, repeated form or component names, children inside non-container
 controls, and more than one child in a `Card` or `Scroll`. It validates event
-names, handler identifiers, handler return shape, and Go syntax. Widget moves
-stay within a form, while copy and paste can safely cross forms.
+names, handler identifiers, handler parameter and return shape, compatible
+shared-handler signatures, and Go syntax. Widget moves stay within a form,
+while copy and paste can safely cross forms.
 
 Studio automatically migrates version-2 single-form and version-3 through
 version-7 multi-form designs to version 8; save the file to keep the upgraded

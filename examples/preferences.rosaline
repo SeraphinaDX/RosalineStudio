@@ -173,7 +173,7 @@
     }
   ],
   "handlers": {
-    "PreferencesPageChanged": "app.Widgets().StatusLabel.SetText(\"Preferences page changed\")",
+    "PreferencesPageChanged": "app.Widgets().StatusLabel.SetText(\"Page: \" + title)",
     "SavePreferences": "app.Widgets().StatusLabel.SetText(\"Preferences saved\")\nrosaline.Message(\"Preferences\", \"Your settings were saved.\")"
   }
 }

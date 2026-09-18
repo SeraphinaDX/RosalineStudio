@@ -122,6 +122,7 @@ type studio struct {
 	selectedEvent   int
 	eventHandler    string
 	codeHandler     string
+	codeParameters  []eventParameter
 	codeReturnsBool bool
 	codeBody        string
 	previewPictures map[string]*rosaline.Picture
@@ -559,7 +560,7 @@ func (studio *studio) buildWorkspace() rosaline.Widget {
 	).Gap(7).Expand()
 	code := rosaline.Column(
 		rosaline.LabelFunc(studio.codeHeader).Bold().Color(rosaline.Rose),
-		rosaline.Label("Write the body of this Go event method. The app and rosaline names are ready to use.").Color(rosaline.DefaultTheme.Muted),
+		rosaline.Label("Write the method body. The parameters above, app, and rosaline are ready to use.").Color(rosaline.DefaultTheme.Muted),
 		studio.codeEditor,
 		rosaline.Row(
 			rosaline.Button("Save Event Code", func() { studio.saveOpenHandler() }).Primary(),
@@ -891,7 +892,8 @@ func (studio *studio) selectedEventDescription() string {
 	if studio.selectedEvent < 0 || studio.selectedEvent >= len(studio.availableEvents) {
 		return "This control has no editable events yet."
 	}
-	return studio.availableEvents[studio.selectedEvent].Description
+	event := studio.availableEvents[studio.selectedEvent]
+	return event.Description + "  Handler: " + event.signature().display()
 }
 
 func (studio *studio) editDefaultEvent() {
@@ -938,12 +940,13 @@ func (studio *studio) editSelectedEvent() {
 		studio.status = "Could not assign event: " + err.Error()
 		return
 	}
-	if existing := signatures[handler]; existing.Seen && existing.ReturnsBool != spec.ReturnsBool {
-		studio.status = "That handler is already used by an event with a different return type"
+	signature := spec.signature()
+	if existing := signatures[handler]; existing.Seen && !existing.compatible(signature) {
+		studio.status = "That handler already uses " + existing.display() + "; this event needs " + signature.display()
 		return
 	}
 	if body, exists := studio.project.Handlers[handler]; exists {
-		if err := validateHandler(handler, body, spec.ReturnsBool); err != nil {
+		if err := validateHandlerSignature(handler, body, signature); err != nil {
 			studio.status = "That existing handler has an incompatible Go signature"
 			return
 		}
@@ -962,6 +965,7 @@ func (studio *studio) editSelectedEvent() {
 		studio.commitChange(before, "Assigned "+event+" to "+handler)
 	}
 	studio.codeHandler = handler
+	studio.codeParameters = append([]eventParameter(nil), spec.Parameters...)
 	studio.codeReturnsBool = spec.ReturnsBool
 	studio.codeBody = studio.project.Handlers[handler]
 	studio.eventHandler = handler
@@ -993,7 +997,8 @@ func (studio *studio) saveOpenHandler() bool {
 	if studio.codeHandler == "" || studio.codeEditor == nil {
 		return true
 	}
-	if err := validateHandler(studio.codeHandler, studio.codeBody, studio.codeReturnsBool); err != nil {
+	signature := handlerSignature{Parameters: append([]eventParameter(nil), studio.codeParameters...), ReturnsBool: studio.codeReturnsBool, Seen: true}
+	if err := validateHandlerSignature(studio.codeHandler, studio.codeBody, signature); err != nil {
 		rosaline.Error("Invalid event code", err.Error())
 		studio.status = "Event code is invalid for this event"
 		return false
@@ -1040,7 +1045,8 @@ func (studio *studio) codeHeader() string {
 	if studio.codeHandler == "" {
 		return "No event handler selected"
 	}
-	result := "func (app *Application) " + studio.codeHandler + "()"
+	signature := handlerSignature{Parameters: studio.codeParameters, ReturnsBool: studio.codeReturnsBool, Seen: true}
+	result := "func (app *Application) " + studio.codeHandler + "(" + signature.parameterDeclaration() + ")"
 	if studio.codeReturnsBool {
 		result += " bool"
 	}
@@ -1638,6 +1644,7 @@ func (studio *studio) newDesign() {
 	studio.clipboard = nil
 	studio.dirty = false
 	studio.codeHandler, studio.codeBody = "", ""
+	studio.codeParameters = nil
 	studio.codeReturnsBool = false
 	studio.previewPictures = make(map[string]*rosaline.Picture)
 	studio.tabPages = make(map[string]string)
@@ -1683,6 +1690,7 @@ func (studio *studio) openDesign() {
 	studio.clipboard = nil
 	studio.dirty = false
 	studio.codeHandler, studio.codeBody = "", ""
+	studio.codeParameters = nil
 	studio.codeReturnsBool = false
 	studio.previewPictures = make(map[string]*rosaline.Picture)
 	studio.tabPages = make(map[string]string)
@@ -1830,7 +1838,7 @@ func (studio *studio) showHelp() {
 func (studio *studio) showAbout() {
 	rosaline.Message(
 		"About Rosaline Studio",
-		"Rosaline Studio v0.10.0\n\nA pure-Go Lazarus-style RAD environment built with Rosaline.\n\nGenerated code remains normal, readable Rosaline Go.",
+		"Rosaline Studio v0.11.0\n\nA pure-Go Lazarus-style RAD environment built with Rosaline.\n\nGenerated code remains normal, readable Rosaline Go.",
 	)
 	studio.canvas.Focus()
 }

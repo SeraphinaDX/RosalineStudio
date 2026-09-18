@@ -257,6 +257,12 @@ func (studio *studio) applyMenuInspector() {
 			studio.status = "Handler names must be valid Go identifiers"
 			return
 		}
+		if handler != "" {
+			if err := handlerAcceptsSignature(studio.project, handler, handlerSignature{Seen: true}); err != nil {
+				studio.status = err.Error()
+				return
+			}
+		}
 		if err := validateMenuShortcut(shortcut); err != nil {
 			studio.status = err.Error()
 			return
@@ -296,11 +302,10 @@ func (studio *studio) editMenuHandler() {
 	if !studio.confirmOpenHandler(handler) {
 		return
 	}
-	if body, exists := studio.project.Handlers[handler]; exists {
-		if err := validateHandler(handler, body, false); err != nil {
-			studio.status = "That existing handler has an incompatible Go signature"
-			return
-		}
+	signature := handlerSignature{Seen: true}
+	if err := handlerAcceptsSignature(studio.project, handler, signature); err != nil {
+		studio.status = err.Error()
+		return
 	}
 	before := designSnapshot(studio.project)
 	changed := menu.Handler != handler
@@ -316,6 +321,7 @@ func (studio *studio) editMenuHandler() {
 		studio.commitChange(before, "Assigned menu click to "+handler)
 	}
 	studio.codeHandler = handler
+	studio.codeParameters = nil
 	studio.codeReturnsBool = false
 	studio.codeBody = studio.project.Handlers[handler]
 	studio.menu.Handler = handler

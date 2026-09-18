@@ -25,7 +25,21 @@ const (
 type eventSpec struct {
 	Name        string
 	Description string
+	Parameters  []eventParameter
 	ReturnsBool bool
+}
+
+type eventParameter struct {
+	Name string
+	Type string
+}
+
+func parameters(values ...string) []eventParameter {
+	result := make([]eventParameter, 0, len(values)/2)
+	for index := 0; index+1 < len(values); index += 2 {
+		result = append(result, eventParameter{Name: values[index], Type: values[index+1]})
+	}
+	return result
 }
 
 func formEventSpecs() []eventSpec {
@@ -45,39 +59,41 @@ func supportsFormEvent(name string) bool {
 	return false
 }
 
-func eventReturnsBool(name string) bool { return name == eventCloseRequest }
-
 func eventSpecsFor(kind widgetKind) []eventSpec {
 	switch kind {
 	case kindButton, kindImage:
 		return []eventSpec{{Name: eventClick, Description: "Runs when the control is clicked."}}
 	case kindTextBox:
 		return []eventSpec{
-			{Name: eventChange, Description: "Runs after the text changes."},
-			{Name: eventSubmit, Description: "Runs when Enter is pressed."},
+			{Name: eventChange, Description: "Runs after the text changes.", Parameters: parameters("value", "string")},
+			{Name: eventSubmit, Description: "Runs when Enter is pressed.", Parameters: parameters("value", "string")},
 		}
-	case kindTextArea, kindCheckBox, kindComboBox, kindSlider:
-		return []eventSpec{{Name: eventChange, Description: "Runs after the value changes."}}
+	case kindTextArea, kindComboBox:
+		return []eventSpec{{Name: eventChange, Description: "Runs after the value changes.", Parameters: parameters("value", "string")}}
+	case kindCheckBox:
+		return []eventSpec{{Name: eventChange, Description: "Runs after the checked state changes.", Parameters: parameters("checked", "bool")}}
+	case kindSlider:
+		return []eventSpec{{Name: eventChange, Description: "Runs after the numeric value changes.", Parameters: parameters("value", "float64")}}
 	case kindRadioGroup:
-		return []eventSpec{{Name: eventChange, Description: "Runs after the selected radio choice changes."}}
+		return []eventSpec{{Name: eventChange, Description: "Runs after the selected radio choice changes.", Parameters: parameters("value", "string")}}
 	case kindList:
 		return []eventSpec{
-			{Name: eventSelect, Description: "Runs after the selected list item changes."},
-			{Name: eventActivate, Description: "Runs when a list item is double-clicked or activated with Enter."},
+			{Name: eventSelect, Description: "Runs after the selected list item changes.", Parameters: parameters("index", "int", "value", "string")},
+			{Name: eventActivate, Description: "Runs when a list item is double-clicked or activated with Enter.", Parameters: parameters("index", "int", "value", "string")},
 		}
 	case kindTable:
 		return []eventSpec{
-			{Name: eventSelect, Description: "Runs after the selected table row changes."},
-			{Name: eventActivate, Description: "Runs when a table row is double-clicked or activated with Enter."},
+			{Name: eventSelect, Description: "Runs after the selected table row changes.", Parameters: parameters("index", "int", "row", "[]string")},
+			{Name: eventActivate, Description: "Runs when a table row is double-clicked or activated with Enter.", Parameters: parameters("index", "int", "row", "[]string")},
 		}
 	case kindTree:
 		return []eventSpec{
-			{Name: eventSelect, Description: "Runs after the selected tree node changes."},
-			{Name: eventActivate, Description: "Runs when a tree node is double-clicked or activated with Enter."},
-			{Name: eventExpand, Description: "Runs after a tree node is opened or closed."},
+			{Name: eventSelect, Description: "Runs after the selected tree node changes.", Parameters: parameters("node", "*rosaline.TreeNode")},
+			{Name: eventActivate, Description: "Runs when a tree node is double-clicked or activated with Enter.", Parameters: parameters("node", "*rosaline.TreeNode")},
+			{Name: eventExpand, Description: "Runs after a tree node is opened or closed.", Parameters: parameters("node", "*rosaline.TreeNode", "expanded", "bool")},
 		}
 	case kindTabs:
-		return []eventSpec{{Name: eventChange, Description: "Runs after the selected tab page changes."}}
+		return []eventSpec{{Name: eventChange, Description: "Runs after the selected tab page changes.", Parameters: parameters("index", "int", "title", "string")}}
 	default:
 		return nil
 	}
@@ -92,26 +108,45 @@ func supportsEvent(kind widgetKind, name string) bool {
 	return false
 }
 
+func eventSpecFor(kind widgetKind, name string) (eventSpec, bool) {
+	for _, event := range eventSpecsFor(kind) {
+		if event.Name == name {
+			return event, true
+		}
+	}
+	return eventSpec{}, false
+}
+
 func validHandlerName(name string) bool {
 	name = strings.TrimSpace(name)
 	return token.IsIdentifier(name) && !token.Lookup(name).IsKeyword()
 }
 
 func validateHandler(name, body string, returnsBool bool) error {
+	return validateHandlerSignature(name, body, handlerSignature{ReturnsBool: returnsBool, Seen: true})
+}
+
+func validateHandlerSignature(name, body string, signature handlerSignature) error {
 	if !validHandlerName(name) {
 		return fmt.Errorf("invalid event handler name %q", name)
 	}
 	result := ""
-	if returnsBool {
+	if signature.ReturnsBool {
 		result = " bool"
 	}
-	source := "package main\nfunc " + name + "()" + result + " {\n" + body + "\n}\n"
+	source := "package main\nimport rosaline \"github.com/SeraphinaDX/Rosaline\"\nvar _ = rosaline.Message\nfunc " + name + "(" + signature.parameterDeclaration() + ")" + result + " {\n" + body + "\n}\n"
 	file, err := parser.ParseFile(token.NewFileSet(), "event.go", source, parser.AllErrors)
 	if err != nil {
 		return fmt.Errorf("event handler %s contains invalid Go: %w", name, err)
 	}
-	declaration, ok := file.Decls[0].(*ast.FuncDecl)
-	if !ok || declaration.Body == nil {
+	var declaration *ast.FuncDecl
+	for _, item := range file.Decls {
+		if function, ok := item.(*ast.FuncDecl); ok && function.Name.Name == name {
+			declaration = function
+			break
+		}
+	}
+	if declaration == nil || declaration.Body == nil {
 		return fmt.Errorf("event handler %s could not be parsed", name)
 	}
 	hasValueReturn := false
@@ -124,7 +159,7 @@ func validateHandler(name, body string, returnsBool bool) error {
 		if !ok {
 			return true
 		}
-		if returnsBool {
+		if signature.ReturnsBool {
 			hasValueReturn = hasValueReturn || len(statement.Results) != 0
 			invalidReturn = invalidReturn || len(statement.Results) == 0
 		} else {
@@ -132,28 +167,86 @@ func validateHandler(name, body string, returnsBool bool) error {
 		}
 		return true
 	})
-	if invalidReturn || (returnsBool && !hasValueReturn) {
+	if invalidReturn || (signature.ReturnsBool && !hasValueReturn) {
 		return fmt.Errorf("event handler %s has a return statement that does not match its event", name)
 	}
 	return nil
 }
 
 type handlerSignature struct {
+	Parameters  []eventParameter
 	ReturnsBool bool
 	Seen        bool
 }
 
+func (signature handlerSignature) parameterDeclaration() string {
+	parts := make([]string, 0, len(signature.Parameters))
+	for _, parameter := range signature.Parameters {
+		parts = append(parts, parameter.Name+" "+parameter.Type)
+	}
+	return strings.Join(parts, ", ")
+}
+
+func (signature handlerSignature) arguments() string {
+	parts := make([]string, 0, len(signature.Parameters))
+	for _, parameter := range signature.Parameters {
+		parts = append(parts, parameter.Name)
+	}
+	return strings.Join(parts, ", ")
+}
+
+func (signature handlerSignature) display() string {
+	result := "func(" + signature.parameterDeclaration() + ")"
+	if signature.ReturnsBool {
+		result += " bool"
+	}
+	return result
+}
+
+func (signature handlerSignature) compatible(other handlerSignature) bool {
+	if signature.ReturnsBool != other.ReturnsBool || len(signature.Parameters) != len(other.Parameters) {
+		return false
+	}
+	for index, parameter := range signature.Parameters {
+		if parameter != other.Parameters[index] {
+			return false
+		}
+	}
+	return true
+}
+
+func (event eventSpec) signature() handlerSignature {
+	return handlerSignature{Parameters: append([]eventParameter(nil), event.Parameters...), ReturnsBool: event.ReturnsBool, Seen: true}
+}
+
+func eventSignatureFor(kind widgetKind, name string) handlerSignature {
+	if event, ok := eventSpecFor(kind, name); ok {
+		return event.signature()
+	}
+	return handlerSignature{Seen: true}
+}
+
+func formEventSignature(name string) handlerSignature {
+	for _, event := range formEventSpecs() {
+		if event.Name == name {
+			return event.signature()
+		}
+	}
+	return handlerSignature{Seen: true}
+}
+
 func projectHandlerSignatures(project *designProject) (map[string]handlerSignature, error) {
 	result := make(map[string]handlerSignature)
-	register := func(name string, returnsBool bool) error {
+	register := func(name string, signature handlerSignature) error {
 		name = strings.TrimSpace(name)
 		if name == "" {
 			return nil
 		}
-		if existing := result[name]; existing.Seen && existing.ReturnsBool != returnsBool {
-			return fmt.Errorf("event handler %s is assigned to events with incompatible return values", name)
+		if existing := result[name]; existing.Seen && !existing.compatible(signature) {
+			return fmt.Errorf("event handler %s is assigned to incompatible signatures %s and %s", name, existing.display(), signature.display())
 		}
-		result[name] = handlerSignature{ReturnsBool: returnsBool, Seen: true}
+		signature.Seen = true
+		result[name] = signature
 		return nil
 	}
 	var visit func(*designNode) error
@@ -161,8 +254,8 @@ func projectHandlerSignatures(project *designProject) (map[string]handlerSignatu
 		if node == nil {
 			return nil
 		}
-		for _, handler := range node.Events {
-			if err := register(handler, false); err != nil {
+		for event, handler := range node.Events {
+			if err := register(handler, eventSignatureFor(node.Kind, event)); err != nil {
 				return err
 			}
 		}
@@ -176,7 +269,7 @@ func projectHandlerSignatures(project *designProject) (map[string]handlerSignatu
 	if project != nil {
 		for _, action := range project.Actions {
 			if action != nil {
-				if err := register(action.Handler, false); err != nil {
+				if err := register(action.Handler, handlerSignature{Seen: true}); err != nil {
 					return nil, err
 				}
 			}
@@ -187,20 +280,20 @@ func projectHandlerSignatures(project *designProject) (map[string]handlerSignatu
 			}
 			for _, component := range form.Components {
 				if component != nil && component.Kind == componentTimer {
-					if err := register(component.Handler, false); err != nil {
+					if err := register(component.Handler, handlerSignature{Seen: true}); err != nil {
 						return nil, err
 					}
 				}
 			}
 			for event, handler := range form.Events {
-				if err := register(handler, eventReturnsBool(event)); err != nil {
+				if err := register(handler, formEventSignature(event)); err != nil {
 					return nil, err
 				}
 			}
 			var menuErr error
 			visitDesignMenus(form.Menus, func(menu *designMenu) {
 				if menuErr == nil && menu.Kind == menuKindItem && menu.Action == "" {
-					menuErr = register(menu.Handler, false)
+					menuErr = register(menu.Handler, handlerSignature{Seen: true})
 				}
 			})
 			if menuErr != nil {
@@ -222,7 +315,7 @@ func validateProjectHandlers(project *designProject) error {
 	for name, body := range project.Handlers {
 		signature := signatures[name]
 		if signature.Seen {
-			if err := validateHandler(name, body, signature.ReturnsBool); err != nil {
+			if err := validateHandlerSignature(name, body, signature); err != nil {
 				return err
 			}
 			continue
@@ -236,9 +329,20 @@ func validateProjectHandlers(project *designProject) error {
 	return nil
 }
 
-func handlerReturnsBool(project *designProject, name string) bool {
-	signatures, _ := projectHandlerSignatures(project)
-	return signatures[name].ReturnsBool
+func handlerAcceptsSignature(project *designProject, name string, signature handlerSignature) error {
+	signatures, err := projectHandlerSignatures(project)
+	if err != nil {
+		return err
+	}
+	if existing := signatures[name]; existing.Seen && !existing.compatible(signature) {
+		return fmt.Errorf("handler %s already uses %s; this event needs %s", name, existing.display(), signature.display())
+	}
+	if project != nil {
+		if body, exists := project.Handlers[name]; exists {
+			return validateHandlerSignature(name, body, signature)
+		}
+	}
+	return nil
 }
 
 func defaultHandlerName(node *designNode, event string) string {
@@ -267,11 +371,20 @@ func defaultHandlerBody(node *designNode, event string) string {
 	if node != nil {
 		switch node.Kind {
 		case kindList:
-			return fmt.Sprintf("// Read the current item with app.Widgets().%s.Selected().\n// Add your response here.", node.Component)
+			return "// index is the selected position; value is the selected item.\n// Add your response here."
 		case kindTable:
-			return fmt.Sprintf("// Read the current row with app.Widgets().%s.Selected().\n// Add your response here.", node.Component)
+			return "// index is the selected position; row contains the selected cells.\n// Add your response here."
 		case kindTree:
-			return fmt.Sprintf("// Read the current node with app.Widgets().%s.Selected().\n// Add your response here.", node.Component)
+			if event == eventExpand {
+				return "// node is the changed item; expanded reports whether it is open.\n// Add your response here."
+			}
+			return "// node is the selected tree item.\n// Add your response here."
+		case kindTabs:
+			return "// index is the selected page; title is its visible title.\n// Add your response here."
+		case kindCheckBox:
+			return "// checked contains the control's new state.\n// Add your response here."
+		case kindTextBox, kindTextArea, kindComboBox, kindRadioGroup, kindSlider:
+			return "// value contains the control's new value.\n// Add your response here."
 		}
 	}
 	if node != nil && node.Name != "" {
