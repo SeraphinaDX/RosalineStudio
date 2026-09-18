@@ -146,6 +146,25 @@ func TestPreviewLaysOutDataControls(t *testing.T) {
 	}
 }
 
+func TestPreviewLaysOutCanvasAtItsDesignedSize(t *testing.T) {
+	project := newProject()
+	root := project.mainForm().Root
+	root.Children = nil
+	canvas, err := project.addNear(root.ID, kindCanvas)
+	if err != nil {
+		t.Fatal(err)
+	}
+	canvas.Width, canvas.Height = 360, 210
+	boxes := layoutPreview(project.mainForm())
+	if len(boxes) != 2 {
+		t.Fatalf("want root and Canvas preview boxes, got %d", len(boxes))
+	}
+	box := boxes[1]
+	if box.Node.Kind != kindCanvas || box.Rect.Width != 360 || box.Rect.Height != 210 {
+		t.Fatalf("unexpected Canvas preview: %#v", box)
+	}
+}
+
 func TestTailOutput(t *testing.T) {
 	if got := tailOutput("  short output  ", 50); got != "short output" {
 		t.Fatalf("unexpected short output: %q", got)

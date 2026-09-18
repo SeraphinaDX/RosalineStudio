@@ -1,13 +1,13 @@
 # Rosaline design format
 
 Rosaline Studio stores visual projects as UTF-8 JSON files ending in
-`.rosaline`. The current schema version is `8`.
+`.rosaline`. The current schema version is `9`.
 
 ## Project fields
 
 | Field | Type | Meaning |
 |---|---|---|
-| `version` | integer | Design schema version; currently `8` |
+| `version` | integer | Design schema version; currently `9` |
 | `module` | string | Generated Go module path |
 | `actions` | action array | Reusable commands shared by menu items and toolbars |
 | `forms` | form array | Primary form first, followed by reusable secondary forms |
@@ -131,6 +131,7 @@ Every widget has a globally unique internal `id`, a `kind`, and an exported Go
 | `text` | labels, buttons, inputs, checks, tab pages | Visible text, placeholder, or page title |
 | `name` | stateful controls | Preferred generated Go state-field name |
 | `asset` | images | Safe filename in the design's `.assets` folder |
+| `background` | canvases | Hex drawing-surface background color |
 | `events` | interactive controls | Event names mapped to Go handler methods |
 | `options` | combo boxes | Available choices |
 | `data` | lists, tables, trees, radio groups | Designer data, one source line per array item |
@@ -145,6 +146,7 @@ Every widget has a globally unique internal `id`, a `kind`, and an exported Go
 | `password` | text boxes | Mask entered text |
 | `vertical` | sliders/progress | Use vertical orientation |
 | `horizontal` | radio groups | Arrange choices from left to right |
+| `focus` | canvases | Give the canvas initial keyboard focus |
 
 Component names are exported Go identifiers such as `SaveButton`. They are
 available to event code through `app.Widgets().SaveButton`. Form names work the
@@ -228,11 +230,40 @@ Lists and tables support `OnSelect` and `OnActivate`. Trees support
 `OnSelect`, `OnActivate`, and `OnExpand`. Radio groups bind a generated Go
 string named by `name` and support `OnChange`.
 
+## Canvas
+
+A `Canvas` is a leaf widget with an explicit pixel `width` and `height`, a hex
+`background`, and an optional `focus` flag. Studio derives its typed methods
+from the event names:
+
+| Event | Method parameter |
+|---|---|
+| `OnDraw` | `canvas *rosaline.DrawingCanvas` |
+| `OnMouseDown`, `OnDoubleClick`, `OnMouseMove`, `OnMouseUp` | `event rosaline.MouseEvent` |
+| `OnKeyDown`, `OnKeyUp` | `event rosaline.KeyEvent` |
+
+```json
+{
+  "id": "node-3",
+  "kind": "Canvas",
+  "component": "ArtCanvas",
+  "background": "#fff7fb",
+  "events": {
+    "OnDraw": "ArtCanvasDraw",
+    "OnMouseMove": "ArtCanvasMouseMove"
+  },
+  "width": 640,
+  "height": 360,
+  "expand": true,
+  "focus": true
+}
+```
+
 ## Example
 
 ```json
 {
-  "version": 8,
+  "version": 9,
   "module": "example.com/greeting",
   "actions": [
     {
@@ -324,7 +355,7 @@ shared-handler signatures, and Go syntax. Widget moves stay within a form,
 while copy and paste can safely cross forms.
 
 Studio automatically migrates version-2 single-form and version-3 through
-version-7 multi-form designs to version 8; save the file to keep the upgraded
+version-8 multi-form designs to version 9; save the file to keep the upgraded
 structure. Version-1 designs used a generic string action dispatcher and
 remain intentionally incompatible.
 Commit important design files to Git before opening them in a newer Studio

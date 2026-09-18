@@ -12,6 +12,13 @@ import (
 
 const (
 	eventClick        = "OnClick"
+	eventDraw         = "OnDraw"
+	eventMouseDown    = "OnMouseDown"
+	eventDoubleClick  = "OnDoubleClick"
+	eventMouseMove    = "OnMouseMove"
+	eventMouseUp      = "OnMouseUp"
+	eventKeyDown      = "OnKeyDown"
+	eventKeyUp        = "OnKeyUp"
 	eventChange       = "OnChange"
 	eventSubmit       = "OnSubmit"
 	eventSelect       = "OnSelect"
@@ -63,6 +70,16 @@ func eventSpecsFor(kind widgetKind) []eventSpec {
 	switch kind {
 	case kindButton, kindImage:
 		return []eventSpec{{Name: eventClick, Description: "Runs when the control is clicked."}}
+	case kindCanvas:
+		return []eventSpec{
+			{Name: eventDraw, Description: "Draws the canvas whenever it is created or redrawn.", Parameters: parameters("canvas", "*rosaline.DrawingCanvas")},
+			{Name: eventMouseDown, Description: "Runs when a mouse button is pressed over the canvas.", Parameters: parameters("event", "rosaline.MouseEvent")},
+			{Name: eventDoubleClick, Description: "Runs when the primary mouse button is double-clicked.", Parameters: parameters("event", "rosaline.MouseEvent")},
+			{Name: eventMouseMove, Description: "Runs when the pointer moves or drags over the canvas.", Parameters: parameters("event", "rosaline.MouseEvent")},
+			{Name: eventMouseUp, Description: "Runs when a mouse button is released over the canvas.", Parameters: parameters("event", "rosaline.MouseEvent")},
+			{Name: eventKeyDown, Description: "Runs when a key is pressed while the canvas has focus.", Parameters: parameters("event", "rosaline.KeyEvent")},
+			{Name: eventKeyUp, Description: "Runs when a key is released while the canvas has focus.", Parameters: parameters("event", "rosaline.KeyEvent")},
+		}
 	case kindTextBox:
 		return []eventSpec{
 			{Name: eventChange, Description: "Runs after the text changes.", Parameters: parameters("value", "string")},
@@ -370,6 +387,15 @@ func defaultHandlerBody(node *designNode, event string) string {
 	}
 	if node != nil {
 		switch node.Kind {
+		case kindCanvas:
+			switch event {
+			case eventDraw:
+				return fmt.Sprintf("// Draw the complete scene. This runs again after Redraw().\ncanvas.Clear(rosaline.Hex(%q))", defaultText(node.Background, "#ffffff"))
+			case eventMouseDown, eventDoubleClick, eventMouseMove, eventMouseUp:
+				return "// event contains canvas coordinates, the mouse button, modifiers, and drag state.\n// Mouse callbacks redraw the canvas automatically."
+			case eventKeyDown, eventKeyUp:
+				return "// event contains the key, text, and keyboard modifiers.\n// Add your keyboard response here."
+			}
 		case kindList:
 			return "// index is the selected position; value is the selected item.\n// Add your response here."
 		case kindTable:

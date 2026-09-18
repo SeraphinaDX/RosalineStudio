@@ -219,6 +219,8 @@ func widgetType(kind widgetKind) string {
 		return "*rosaline.LabelWidget"
 	case kindImage:
 		return "*rosaline.ImageWidget"
+	case kindCanvas:
+		return "*rosaline.CanvasWidget"
 	case kindButton:
 		return "*rosaline.ButtonWidget"
 	case kindTextBox:
@@ -911,6 +913,34 @@ func generateNode(node *designNode, context *generationContext, depth int) strin
 		if node.Expand {
 			expression += ".Expand()"
 		}
+	case kindCanvas:
+		draw := "nil"
+		if handler := eventHandler(node, eventDraw); handler != "" {
+			draw = fmt.Sprintf("func(canvas *rosaline.DrawingCanvas) { app.%s(canvas) }", handler)
+		}
+		expression = "rosaline.Canvas(" + draw + ")"
+		width, height := node.Width, node.Height
+		if width <= 0 {
+			width = 480
+		}
+		if height <= 0 {
+			height = 300
+		}
+		expression += fmt.Sprintf(".Size(%d, %d)", width, height)
+		background := strings.TrimSpace(node.Background)
+		if background == "" {
+			background = "#ffffff"
+		}
+		expression += fmt.Sprintf(".Background(rosaline.Hex(%q))", background)
+		if node.Expand {
+			expression += ".Expand()"
+		}
+		if node.Focus {
+			expression += ".Focus()"
+		}
+		for _, event := range []string{eventMouseDown, eventDoubleClick, eventMouseMove, eventMouseUp, eventKeyDown, eventKeyUp} {
+			expression += generatedEventModifier(node, event)
+		}
 	case kindButton:
 		if handler := eventHandler(node, eventClick); handler != "" {
 			expression = fmt.Sprintf("rosaline.Button(%q, func() { app.%s() })", node.Text, handler)
@@ -1049,7 +1079,7 @@ func generateNode(node *designNode, context *generationContext, depth int) strin
 		expression = "rosaline.Label(\"Unknown widget\")"
 	}
 
-	if node.Kind != kindScroll && node.Kind != kindSpacer && node.Kind != kindImage && node.Width > 0 && node.Height > 0 {
+	if node.Kind != kindScroll && node.Kind != kindSpacer && node.Kind != kindImage && node.Kind != kindCanvas && node.Width > 0 && node.Height > 0 {
 		size := fmt.Sprintf("rosaline.Size(%%s, %d, %d)", node.Width, node.Height)
 		field := context.widgetsByID[node.ID]
 		expression = fmt.Sprintf(size, fmt.Sprintf("rememberWidget(&generatedWidgets.%s, %s)", field.Name, expression))

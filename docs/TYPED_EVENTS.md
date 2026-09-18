@@ -13,6 +13,9 @@ the Event Code editor.
 | Component | Event | Generated parameters |
 |---|---|---|
 | Button, Image | `OnClick` | none |
+| Canvas | `OnDraw` | `canvas *rosaline.DrawingCanvas` |
+| Canvas | `OnMouseDown`, `OnDoubleClick`, `OnMouseMove`, `OnMouseUp` | `event rosaline.MouseEvent` |
+| Canvas | `OnKeyDown`, `OnKeyUp` | `event rosaline.KeyEvent` |
 | TextBox | `OnChange`, `OnSubmit` | `value string` |
 | TextArea, ComboBox | `OnChange` | `value string` |
 | CheckBox | `OnChange` | `checked bool` |
@@ -57,6 +60,19 @@ func (app *Application) ProjectExpanded(node *rosaline.TreeNode, expanded bool) 
 	}
 }
 ```
+
+A Canvas drawing method receives the drawing surface directly:
+
+```go
+func (app *Application) SceneDraw(canvas *rosaline.DrawingCanvas) {
+	canvas.Clear(rosaline.White)
+	canvas.FillCircle(120, 90, 24, rosaline.Rose)
+}
+```
+
+Canvas pointer and keyboard methods receive complete event values. See
+[Canvas Designer](CANVAS_DESIGNER.md) for coordinates, drag state, modifiers,
+redrawing, and exporting a canvas picture.
 
 ## Shared handlers
 

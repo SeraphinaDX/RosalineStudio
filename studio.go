@@ -22,6 +22,7 @@ type inspectorState struct {
 	Text       string
 	Name       string
 	Asset      string
+	Background string
 	Options    string
 	Data       string
 	Gap        string
@@ -38,6 +39,7 @@ type inspectorState struct {
 	Password   bool
 	Vertical   bool
 	Horizontal bool
+	Focus      bool
 }
 
 type projectInspectorState struct {
@@ -664,6 +666,7 @@ func (studio *studio) buildInspectorPanel() rosaline.Widget {
 			rosaline.Button("Clear", studio.clearImage),
 		).Gap(6),
 		inspectorField("Comma-separated options", rosaline.TextBox(&studio.inspector.Options).Width(24)),
+		inspectorField("Canvas background", rosaline.TextBox(&studio.inspector.Background).Width(24)),
 	).Gap(8)
 
 	layoutProperties := rosaline.Column(
@@ -686,6 +689,7 @@ func (studio *studio) buildInspectorPanel() rosaline.Widget {
 		rosaline.CheckBox("Password input", &studio.inspector.Password),
 		rosaline.CheckBox("Vertical slider or progress", &studio.inspector.Vertical),
 		rosaline.CheckBox("Horizontal radio choices", &studio.inspector.Horizontal),
+		rosaline.CheckBox("Give canvas keyboard focus", &studio.inspector.Focus),
 	).Gap(8)
 
 	dataProperties := rosaline.Column(
@@ -1361,6 +1365,18 @@ func (studio *studio) applyInspector() {
 		studio.status = "A tab page title cannot be empty"
 		return
 	}
+	background := strings.TrimSpace(studio.inspector.Background)
+	if node.Kind == kindCanvas {
+		if background == "" {
+			background = "#ffffff"
+		}
+		if !validHexColor(background) {
+			studio.status = "Canvas background must be #RGB, #RRGGBB, or #RRGGBBAA"
+			return
+		}
+	} else {
+		background = ""
+	}
 	node.Component = component
 	node.Text = studio.inspector.Text
 	node.Name = studio.inspector.Name
@@ -1384,6 +1400,8 @@ func (studio *studio) applyInspector() {
 	node.Password = studio.inspector.Password
 	node.Vertical = studio.inspector.Vertical
 	node.Horizontal = studio.inspector.Horizontal
+	node.Background = background
+	node.Focus = node.Kind == kindCanvas && studio.inspector.Focus
 	studio.commitChange(before, "Updated "+string(node.Kind))
 }
 
@@ -1603,14 +1621,14 @@ func (studio *studio) loadInspector() {
 		return
 	}
 	studio.inspector = inspectorState{
-		Component: node.Component, Text: node.Text, Name: node.Name, Asset: node.Asset,
+		Component: node.Component, Text: node.Text, Name: node.Name, Asset: node.Asset, Background: node.Background,
 		Options: strings.Join(node.Options, ", "),
 		Data:    strings.Join(node.Data, "\n"),
 		Gap:     strconv.Itoa(node.Gap), Padding: strconv.Itoa(node.Padding),
 		Columns: strconv.Itoa(max(1, node.Columns)), Width: strconv.Itoa(node.Width), Height: strconv.Itoa(node.Height),
 		Minimum: numberLiteral(node.Minimum), Maximum: numberLiteral(node.Maximum), Step: numberLiteral(node.Step),
 		Expand: node.Expand, Primary: node.Primary, Bold: node.Bold,
-		Password: node.Password, Vertical: node.Vertical, Horizontal: node.Horizontal,
+		Password: node.Password, Vertical: node.Vertical, Horizontal: node.Horizontal, Focus: node.Focus,
 	}
 }
 
@@ -1830,7 +1848,7 @@ func (studio *studio) documentName() string {
 func (studio *studio) showHelp() {
 	rosaline.Message(
 		"Rosaline Studio Quick Help",
-		"1. Select or create a form in Project Forms.\n2. Select a container and double-click a palette item to add it.\n3. Give controls memorable component names in Properties.\n4. Right-click to cut, copy, paste, duplicate, or delete widgets.\n5. Add Tabs, click a page header, and manage pages in the Pages inspector.\n6. Edit List, Table, Tree, or RadioGroup content under Properties > Data.\n7. Use Events to assign a handler, or double-click a form control.\n8. Open Menus to build the form's menu bar.\n9. Open Actions to share commands between menus and a form toolbar.\n10. Open Components to add timers and reusable file dialogs.\n11. Select a form's root layout to edit OnOpen, OnCloseRequest, and OnClose.\n12. Write event code with app.Widgets(), app.Components(), and app.Windows().\n13. Open Source to edit the complete generated Go project.\n14. Press Primary+B to build or F5 to build and run.\n\nStudio only replaces files ending in _generated.go.",
+		"1. Select or create a form in Project Forms.\n2. Select a container and double-click a palette item to add it.\n3. Give controls memorable component names in Properties.\n4. Right-click to cut, copy, paste, duplicate, or delete widgets.\n5. Add Tabs, click a page header, and manage pages in the Pages inspector.\n6. Edit List, Table, Tree, or RadioGroup content under Properties > Data.\n7. Add Canvas for custom drawing, mouse input, and keyboard input.\n8. Use Events to assign a handler, or double-click a form control.\n9. Open Menus to build the form's menu bar.\n10. Open Actions to share commands between menus and a form toolbar.\n11. Open Components to add timers and reusable file dialogs.\n12. Select a form's root layout to edit OnOpen, OnCloseRequest, and OnClose.\n13. Write event code with app.Widgets(), app.Components(), and app.Windows().\n14. Open Source to edit the complete generated Go project.\n15. Press Primary+B to build or F5 to build and run.\n\nStudio only replaces files ending in _generated.go.",
 	)
 	studio.canvas.Focus()
 }
@@ -1838,7 +1856,7 @@ func (studio *studio) showHelp() {
 func (studio *studio) showAbout() {
 	rosaline.Message(
 		"About Rosaline Studio",
-		"Rosaline Studio v0.11.0\n\nA pure-Go Lazarus-style RAD environment built with Rosaline.\n\nGenerated code remains normal, readable Rosaline Go.",
+		"Rosaline Studio v0.12.0\n\nA pure-Go Lazarus-style RAD environment built with Rosaline.\n\nGenerated code remains normal, readable Rosaline Go.",
 	)
 	studio.canvas.Focus()
 }

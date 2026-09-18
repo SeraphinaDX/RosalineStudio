@@ -301,7 +301,7 @@ func previewNaturalSize(node *designNode, horizontal bool) float64 {
 			return min(240, max(130, float64(len([]rune(node.Text))*7+42)))
 		case kindSpacer:
 			return 24
-		case kindColumn, kindRow, kindGrid, kindStack, kindCard, kindScroll, kindTabs, kindTabPage, kindList, kindTable, kindTree, kindRadioGroup:
+		case kindColumn, kindRow, kindGrid, kindStack, kindCard, kindScroll, kindTabs, kindTabPage, kindList, kindTable, kindTree, kindRadioGroup, kindCanvas:
 			return 220
 		default:
 			return 180
@@ -316,6 +316,8 @@ func previewNaturalSize(node *designNode, horizontal bool) float64 {
 		return 110
 	case kindImage:
 		return 160
+	case kindCanvas:
+		return 220
 	case kindScroll, kindTabs:
 		return 180
 	case kindList, kindTable, kindTree:
@@ -549,6 +551,8 @@ func drawPreviewNode(canvas *rosaline.DrawingCanvas, box previewBox, colors prev
 			canvas.Text(defaultText(node.Text, "Choose an image"), rectangle.X+8, rectangle.Y+8, rosaline.TextStyle{Color: colors.muted, Size: 11})
 		}
 		canvas.Rect(rectangle.X, rectangle.Y, rectangle.Width, rectangle.Height, strokeFor(selected), outline)
+	case kindCanvas:
+		drawCanvasPreview(canvas, rectangle, node, colors, outline, selected)
 	case kindButton:
 		fill := colors.surface
 		text := colors.text
@@ -604,6 +608,23 @@ func drawPreviewNode(canvas *rosaline.DrawingCanvas, box previewBox, colors prev
 			canvas.Rect(rectangle.X, rectangle.Y, rectangle.Width, rectangle.Height, 2, selection)
 		}
 	}
+}
+
+func drawCanvasPreview(canvas *rosaline.DrawingCanvas, rectangle previewRect, node *designNode, colors previewPalette, outline rosaline.Color, selected bool) {
+	background := rosaline.Hex(defaultText(node.Background, "#ffffff"))
+	canvas.FillRect(rectangle.X, rectangle.Y, rectangle.Width, rectangle.Height, background)
+	grid := colors.border
+	for x := rectangle.X + 24; x < rectangle.X+rectangle.Width; x += 24 {
+		canvas.Line(x, rectangle.Y, x, rectangle.Y+rectangle.Height, 1, grid)
+	}
+	for y := rectangle.Y + 24; y < rectangle.Y+rectangle.Height; y += 24 {
+		canvas.Line(rectangle.X, y, rectangle.X+rectangle.Width, y, 1, grid)
+	}
+	centerX, centerY := rectangle.X+rectangle.Width/2, rectangle.Y+rectangle.Height/2
+	canvas.FillCircle(centerX, centerY, min(24, max(8, math.Min(rectangle.Width, rectangle.Height)/8)), colors.primary)
+	canvas.Text("Canvas", rectangle.X+9, rectangle.Y+8, rosaline.TextStyle{Color: colors.text, Size: 12})
+	canvas.Text(fmt.Sprintf("%d x %d", max(1, node.Width), max(1, node.Height)), rectangle.X+9, rectangle.Y+26, rosaline.TextStyle{Color: colors.muted, Size: 9})
+	canvas.Rect(rectangle.X, rectangle.Y, rectangle.Width, rectangle.Height, strokeFor(selected), outline)
 }
 
 func drawInput(canvas *rosaline.DrawingCanvas, rectangle previewRect, label string, colors previewPalette, outline rosaline.Color, selected bool) {
