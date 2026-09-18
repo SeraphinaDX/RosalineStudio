@@ -2,6 +2,22 @@
 
 All notable Rosaline Studio changes are documented here.
 
+## v0.11.0 - 2026-09-18
+
+- Forward Rosaline callback values into generated application event methods
+  instead of requiring handlers to query controls again.
+- Give event parameters friendly names and exact Go types in generated source.
+- Show the complete generated method signature above Studio's Event Code editor
+  and show each event's signature in the Events inspector.
+- Add typed values for text, check, choice, slider, list, table, tree, and tab
+  events, including multiple parameters where Rosaline supplies them.
+- Validate event bodies in the context of their real parameters so mistakes are
+  reported before generation.
+- Prevent one named handler from being assigned to events with incompatible
+  parameter, result, or semantic signatures.
+- Update the Preferences and Data Browser examples to use callback parameters
+  directly, with a complete typed-events guide.
+
 ## v0.10.0 - 2026-09-17
 
 - Add a Lazarus-style Project Source workspace with grouped developer,

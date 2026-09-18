@@ -45,8 +45,11 @@ Select the Tabs component, open **Events**, choose `OnChange`, and assign a
 normal event method. For example:
 
 ```go
-app.Widgets().StatusLabel.SetText("Preferences page changed")
+app.Widgets().StatusLabel.SetText("Page: " + title)
 ```
+
+The method receives `index int` and `title string` parameters for the newly
+selected page.
 
 The generated component reference is a `*rosaline.TabsWidget`, so advanced
 event code can call its normal Rosaline methods through
@@ -62,7 +65,9 @@ rosaline.Tabs(
 		rosaline.TextBox(&app.State.DisplayName),
 	).Gap(10).Padding(12).Expand()),
 	rosaline.Tab("Advanced", rosaline.Column().Gap(10).Padding(12).Expand()),
-).Expand().OnChange(func(int, string) { app.PreferencesPageChanged() })
+).Expand().OnChange(func(index int, title string) {
+	app.PreferencesPageChanged(index, title)
+})
 ```
 
 TabPage does not become a fake widget field. It describes the title and column

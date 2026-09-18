@@ -283,6 +283,12 @@ func (studio *studio) applyComponentInspector() {
 			studio.status = "Tick handler names must be valid Go identifiers"
 			return
 		}
+		if handler != "" {
+			if err := handlerAcceptsSignature(studio.project, handler, handlerSignature{Seen: true}); err != nil {
+				studio.status = err.Error()
+				return
+			}
+		}
 		candidate.Interval, candidate.Repeating = interval, studio.component.Repeating
 		candidate.Enabled, candidate.Handler = studio.component.Enabled, handler
 		candidate.Title, candidate.InitialDirectory, candidate.InitialFile, candidate.DefaultExtension = "", "", "", ""
@@ -334,6 +340,10 @@ func (studio *studio) editTimerHandler() {
 	if !studio.confirmOpenHandler(handler) {
 		return
 	}
+	if err := handlerAcceptsSignature(studio.project, handler, handlerSignature{Seen: true}); err != nil {
+		studio.status = err.Error()
+		return
+	}
 	before := designSnapshot(studio.project)
 	changed := component.Handler != handler
 	component.Handler = handler
@@ -349,6 +359,7 @@ func (studio *studio) editTimerHandler() {
 	}
 	studio.component.Handler = handler
 	studio.codeHandler, studio.codeReturnsBool = handler, false
+	studio.codeParameters = nil
 	studio.codeBody = studio.project.Handlers[handler]
 	studio.codeEditor.SetText(studio.codeBody)
 	studio.codeEditor.MarkSaved()

@@ -165,13 +165,13 @@
     }
   ],
   "handlers": {
-    "BrowserPageChanged": "app.Widgets().StatusLabel.SetText(\"Changed browser page\")",
-    "ProjectTreeSelected": "if node, ok := app.Widgets().ProjectTree.Selected(); ok {\n\tapp.Widgets().StatusLabel.SetText(\"Tree: \" + node.Value())\n}",
-    "ProjectTreeActivated": "if node, ok := app.Widgets().ProjectTree.Selected(); ok {\n\trosaline.Message(\"Tree item\", node.Value())\n}",
-    "ComponentTableSelected": "if _, values, ok := app.Widgets().ComponentTable.Selected(); ok && len(values) > 0 {\n\tapp.Widgets().StatusLabel.SetText(\"Component: \" + values[0])\n}",
-    "ComponentTableActivated": "if _, values, ok := app.Widgets().ComponentTable.Selected(); ok && len(values) > 0 {\n\trosaline.Message(\"Component\", values[0])\n}",
-    "ViewModeChanged": "app.Widgets().StatusLabel.SetText(\"View mode: \" + app.State.ViewMode)",
-    "KindSelected": "if _, value, ok := app.Widgets().KindList.Selected(); ok {\n\tapp.Widgets().StatusLabel.SetText(\"Filter: \" + value)\n}",
-    "KindActivated": "if _, value, ok := app.Widgets().KindList.Selected(); ok {\n\trosaline.Message(\"Filter\", value)\n}"
+    "BrowserPageChanged": "app.Widgets().StatusLabel.SetText(\"Page \" + title)",
+    "ProjectTreeSelected": "app.Widgets().StatusLabel.SetText(\"Tree: \" + node.Value())",
+    "ProjectTreeActivated": "rosaline.Message(\"Tree item\", node.Value())",
+    "ComponentTableSelected": "if len(row) > 0 {\n\tapp.Widgets().StatusLabel.SetText(\"Component: \" + row[0])\n}",
+    "ComponentTableActivated": "if len(row) > 0 {\n\trosaline.Message(\"Component\", row[0])\n}",
+    "ViewModeChanged": "app.Widgets().StatusLabel.SetText(\"View mode: \" + value)",
+    "KindSelected": "app.Widgets().StatusLabel.SetText(\"Filter: \" + value)",
+    "KindActivated": "rosaline.Message(\"Filter\", value)"
   }
 }

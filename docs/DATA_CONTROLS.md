@@ -26,13 +26,10 @@ Data controls
 ```
 
 List supports `OnSelect` and `OnActivate`. Activation means a double-click or
-Enter on the selected item. Event code can read the current item:
+Enter on the selected item. Both methods receive `index` and `value`:
 
 ```go
-if index, value, ok := app.Widgets().KindList.Selected(); ok {
-	app.Widgets().StatusLabel.SetText(value)
-	_ = index
-}
+app.Widgets().StatusLabel.SetText(value)
 ```
 
 ## RadioGroup
@@ -49,8 +46,8 @@ Compact view = compact
 
 Set **State field name** to the generated Go field, such as `ViewMode`. Enable
 **Horizontal radio choices** under Style to arrange the choices left to right.
-`OnChange` runs after the choice changes, and the new value is already in
-`app.State.ViewMode`.
+`OnChange` runs after the choice changes and receives `value string`. The new
+value is also available in `app.State.ViewMode`.
 
 ## Table
 
@@ -67,13 +64,12 @@ Short rows are padded and long rows are trimmed by Rosaline. Table supports
 `OnSelect` and `OnActivate`:
 
 ```go
-if row, values, ok := app.Widgets().ComponentTable.Selected(); ok {
-	_ = row
-	if len(values) > 0 {
-		app.Widgets().StatusLabel.SetText(values[0])
-	}
+if len(row) > 0 {
+	app.Widgets().StatusLabel.SetText(row[0])
 }
 ```
+
+Both table events receive `index int` and `row []string`.
 
 ## Tree
 
@@ -93,10 +89,11 @@ Generated nodes use the complete path as their value. Tree supports
 `OnSelect`, `OnActivate`, and `OnExpand`:
 
 ```go
-if node, ok := app.Widgets().ProjectTree.Selected(); ok {
-	app.Widgets().StatusLabel.SetText(node.Value())
-}
+app.Widgets().StatusLabel.SetText(node.Value())
 ```
+
+Selection and activation receive `node *rosaline.TreeNode`. Expansion also
+receives `expanded bool`.
 
 ## Generated source
 

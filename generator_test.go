@@ -71,7 +71,7 @@ func TestGeneratorCreatesEventMethods(t *testing.T) {
 		{ID: "name", Kind: kindTextBox, Name: "Name", Events: map[string]string{eventSubmit: "SubmitName"}},
 	}
 	project.Handlers = map[string]string{
-		"SubmitName": `rosaline.Message("Hello", app.State.Name)`,
+		"SubmitName": `rosaline.Message("Hello", value)`,
 	}
 	directory := t.TempDir()
 	if _, err := generateProject(project, directory); err != nil {
@@ -85,10 +85,10 @@ func TestGeneratorCreatesEventMethods(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(string(ui), ".OnSubmit(func(string) { app.SubmitName() })") {
+	if !strings.Contains(string(ui), ".OnSubmit(func(value string) { app.SubmitName(value) })") {
 		t.Fatalf("generated UI did not bind OnSubmit:\n%s", ui)
 	}
-	if !strings.Contains(string(events), "func (app *Application) SubmitName()") || !strings.Contains(string(events), "app.State.Name") {
+	if !strings.Contains(string(events), "func (app *Application) SubmitName(value string)") || !strings.Contains(string(events), `rosaline.Message("Hello", value)`) {
 		t.Fatalf("generated event method is incomplete:\n%s", events)
 	}
 }
@@ -215,7 +215,7 @@ func TestGeneratorCreatesTabsPagesAndChangeEvent(t *testing.T) {
 		"rosaline.Tabs(",
 		`rosaline.Tab("General", rosaline.Column(`,
 		`rosaline.Tab("Advanced", rosaline.Column().Gap(10).Padding(12).Expand())`,
-		`.OnChange(func(int, string) { app.PreferencesPageChanged() })`,
+		`.OnChange(func(index int, title string) { app.PreferencesPageChanged(index, title) })`,
 	} {
 		if !strings.Contains(ui, want) {
 			t.Fatalf("generated tabs are missing %q:\n%s", want, ui)
@@ -289,15 +289,20 @@ func TestGeneratorCreatesDataControlsAndEvents(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	eventsData, err := os.ReadFile(filepath.Join(directory, "events_generated.go"))
+	if err != nil {
+		t.Fatal(err)
+	}
 	ui := string(uiData)
 	state := string(stateData)
+	events := string(eventsData)
 	for _, want := range []string{
-		`rosaline.List("Rose", "Lavender").Expand().OnSelect(func(int, string) { app.PaletteSelected() }).OnActivate(func(int, string) { app.PaletteActivated() })`,
-		`rosaline.Table("Name", "Type").SetRows([]string{"Rosaline", "Library"}, []string{"Studio", "Application"}).Expand().OnSelect(func(int, []string) { app.ProjectSelected() })`,
+		`rosaline.List("Rose", "Lavender").Expand().OnSelect(func(index int, value string) { app.PaletteSelected(index, value) }).OnActivate(func(index int, value string) { app.PaletteActivated(index, value) })`,
+		`rosaline.Table("Name", "Type").SetRows([]string{"Rosaline", "Library"}, []string{"Studio", "Application"}).Expand().OnSelect(func(index int, row []string) { app.ProjectSelected(index, row) })`,
 		`rosaline.Node("Forms"`,
 		`.WithValue("Project/Forms").Expanded()`,
-		`.OnActivate(func(*rosaline.TreeNode) { app.TreeActivated() }).OnExpand(func(*rosaline.TreeNode, bool) { app.TreeExpanded() })`,
-		`rosaline.RadioGroup(&app.State.ViewMode, rosaline.Choice("Automatic", "auto"), rosaline.Choice("Details", "details")).Horizontal().OnChange(func(string) { app.ViewModeChanged() })`,
+		`.OnActivate(func(node *rosaline.TreeNode) { app.TreeActivated(node) }).OnExpand(func(node *rosaline.TreeNode, expanded bool) { app.TreeExpanded(node, expanded) })`,
+		`rosaline.RadioGroup(&app.State.ViewMode, rosaline.Choice("Automatic", "auto"), rosaline.Choice("Details", "details")).Horizontal().OnChange(func(value string) { app.ViewModeChanged(value) })`,
 	} {
 		if !strings.Contains(ui, want) {
 			t.Fatalf("generated data controls are missing %q:\n%s", want, ui)
@@ -316,6 +321,16 @@ func TestGeneratorCreatesDataControlsAndEvents(t *testing.T) {
 	} {
 		if !strings.Contains(state, want) {
 			t.Fatalf("generated component state is missing %q:\n%s", want, state)
+		}
+	}
+	for _, want := range []string{
+		"func (app *Application) PaletteSelected(index int, value string)",
+		"func (app *Application) ProjectSelected(index int, row []string)",
+		"func (app *Application) TreeExpanded(node *rosaline.TreeNode, expanded bool)",
+		"func (app *Application) ViewModeChanged(value string)",
+	} {
+		if !strings.Contains(events, want) {
+			t.Fatalf("generated typed event methods are missing %q:\n%s", want, events)
 		}
 	}
 }
@@ -621,8 +636,28 @@ func TestGeneratedApplicationBuilds(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, kind := range paletteKinds {
-		if _, err := project.addNear(project.mainForm().Root.ID, kind); err != nil {
+		node, err := project.addNear(project.mainForm().Root.ID, kind)
+		if err != nil {
 			t.Fatalf("add %s: %v", kind, err)
+		}
+		var event, handler, body string
+		switch kind {
+		case kindTextBox, kindTextArea, kindComboBox, kindRadioGroup, kindSlider:
+			event, handler, body = eventChange, exportedIdentifier(string(kind))+"Changed", "_ = value"
+		case kindCheckBox:
+			event, handler, body = eventChange, "CheckChanged", "_ = checked"
+		case kindList:
+			event, handler, body = eventSelect, "ListSelected", "_, _ = index, value"
+		case kindTable:
+			event, handler, body = eventSelect, "TableSelected", "_, _ = index, row"
+		case kindTree:
+			event, handler, body = eventExpand, "TreeExpanded", "_, _ = node, expanded"
+		case kindTabs:
+			event, handler, body = eventChange, "TabsChanged", "_, _ = index, title"
+		}
+		if event != "" {
+			node.Events = map[string]string{event: handler}
+			project.Handlers[handler] = body
 		}
 	}
 	if _, err := generateProject(project, directory); err != nil {

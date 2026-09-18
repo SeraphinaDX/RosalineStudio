@@ -645,21 +645,23 @@ func generatedEvents(project *designProject) string {
 	if len(handlers) == 0 {
 		return fmt.Sprintf("// %s\npackage main\n", generatedMarker)
 	}
+	signatures, _ := projectHandlerSignatures(project)
 	var methods strings.Builder
 	for _, name := range handlers {
+		signature := signatures[name]
 		body := strings.TrimSpace(project.Handlers[name])
 		if body == "" {
-			if handlerReturnsBool(project, name) {
+			if signature.ReturnsBool {
 				body = "// Allow the close request by default.\nreturn true"
 			} else {
 				body = "// Add your event code in Rosaline Studio."
 			}
 		}
 		result := ""
-		if handlerReturnsBool(project, name) {
+		if signature.ReturnsBool {
 			result = " bool"
 		}
-		fmt.Fprintf(&methods, "func (app *Application) %s()%s {\n%s\n}\n\n", name, result, indentBody(body, "\t"))
+		fmt.Fprintf(&methods, "func (app *Application) %s(%s)%s {\n%s\n}\n\n", name, signature.parameterDeclaration(), result, indentBody(body, "\t"))
 	}
 	return fmt.Sprintf(`// %s
 package main
@@ -787,7 +789,7 @@ in handlers.go. Studio regenerates ui_generated.go, state_generated.go, and
 events_generated.go, so do not edit those three files directly. Event code can
 open designed forms through app.Windows() and update controls through
 app.Widgets(). Nonvisual timers and file dialogs are available through
-app.Components().
+app.Components(). Events carrying values receive named Go parameters directly.
 `, title)
 }
 
@@ -888,7 +890,7 @@ func generateNode(node *designNode, context *generationContext, depth int) strin
 		if node.Expand {
 			expression += ".Expand()"
 		}
-		expression += generatedEventModifier(node, eventChange, "int, string")
+		expression += generatedEventModifier(node, eventChange)
 	case kindTabPage:
 		expression = "rosaline.Label(\"TabPage must be inside Tabs\")"
 	case kindLabel:
@@ -905,7 +907,7 @@ func generateNode(node *designNode, context *generationContext, depth int) strin
 		if node.Width > 0 && node.Height > 0 {
 			expression += fmt.Sprintf(".Fit(%d, %d)", node.Width, node.Height)
 		}
-		expression += generatedEventModifier(node, eventClick, "")
+		expression += generatedEventModifier(node, eventClick)
 		if node.Expand {
 			expression += ".Expand()"
 		}
@@ -927,19 +929,19 @@ func generateNode(node *designNode, context *generationContext, depth int) strin
 		if node.Password {
 			expression += ".Password()"
 		}
-		expression += generatedEventModifier(node, eventChange, "string")
-		expression += generatedEventModifier(node, eventSubmit, "string")
+		expression += generatedEventModifier(node, eventChange)
+		expression += generatedEventModifier(node, eventSubmit)
 	case kindTextArea:
 		field := context.fieldsByID[node.ID]
 		expression = fmt.Sprintf("rosaline.TextArea(&app.State.%s)", field.Name)
 		if node.Expand {
 			expression += ".Expand()"
 		}
-		expression += generatedEventModifier(node, eventChange, "string")
+		expression += generatedEventModifier(node, eventChange)
 	case kindCheckBox:
 		field := context.fieldsByID[node.ID]
 		expression = fmt.Sprintf("rosaline.CheckBox(%q, &app.State.%s)", node.Text, field.Name)
-		expression += generatedEventModifier(node, eventChange, "bool")
+		expression += generatedEventModifier(node, eventChange)
 	case kindComboBox:
 		field := context.fieldsByID[node.ID]
 		options := make([]string, 0, len(node.Options))
@@ -951,7 +953,7 @@ func generateNode(node *designNode, context *generationContext, depth int) strin
 			expression += ", " + strings.Join(options, ", ")
 		}
 		expression += ")"
-		expression += generatedEventModifier(node, eventChange, "string")
+		expression += generatedEventModifier(node, eventChange)
 	case kindRadioGroup:
 		field := context.fieldsByID[node.ID]
 		choices := make([]string, 0)
@@ -966,7 +968,7 @@ func generateNode(node *designNode, context *generationContext, depth int) strin
 		if node.Horizontal {
 			expression += ".Horizontal()"
 		}
-		expression += generatedEventModifier(node, eventChange, "string")
+		expression += generatedEventModifier(node, eventChange)
 	case kindList:
 		items := make([]string, 0, len(node.Data))
 		for _, item := range node.Data {
@@ -976,8 +978,8 @@ func generateNode(node *designNode, context *generationContext, depth int) strin
 		if node.Expand {
 			expression += ".Expand()"
 		}
-		expression += generatedEventModifier(node, eventSelect, "int, string")
-		expression += generatedEventModifier(node, eventActivate, "int, string")
+		expression += generatedEventModifier(node, eventSelect)
+		expression += generatedEventModifier(node, eventActivate)
 	case kindTable:
 		columns, rows := parseTableData(node.Data)
 		quoted := make([]string, 0, len(columns))
@@ -999,8 +1001,8 @@ func generateNode(node *designNode, context *generationContext, depth int) strin
 		if node.Expand {
 			expression += ".Expand()"
 		}
-		expression += generatedEventModifier(node, eventSelect, "int, []string")
-		expression += generatedEventModifier(node, eventActivate, "int, []string")
+		expression += generatedEventModifier(node, eventSelect)
+		expression += generatedEventModifier(node, eventActivate)
 	case kindTree:
 		items := parseTreeData(node.Data)
 		generated := make([]string, 0, len(items))
@@ -1015,9 +1017,9 @@ func generateNode(node *designNode, context *generationContext, depth int) strin
 		if node.Expand {
 			expression += ".Expand()"
 		}
-		expression += generatedEventModifier(node, eventSelect, "*rosaline.TreeNode")
-		expression += generatedEventModifier(node, eventActivate, "*rosaline.TreeNode")
-		expression += generatedEventModifier(node, eventExpand, "*rosaline.TreeNode, bool")
+		expression += generatedEventModifier(node, eventSelect)
+		expression += generatedEventModifier(node, eventActivate)
+		expression += generatedEventModifier(node, eventExpand)
 	case kindSlider:
 		field := context.fieldsByID[node.ID]
 		minimum, maximum := node.Minimum, node.Maximum
@@ -1031,7 +1033,7 @@ func generateNode(node *designNode, context *generationContext, depth int) strin
 		if node.Vertical {
 			expression += ".Vertical()"
 		}
-		expression += generatedEventModifier(node, eventChange, "float64")
+		expression += generatedEventModifier(node, eventChange)
 	case kindProgressBar:
 		field := context.fieldsByID[node.ID]
 		expression = fmt.Sprintf("rosaline.ProgressBar(&app.State.%s)", field.Name)
@@ -1105,16 +1107,13 @@ func generateTreeDataItem(item *treeDataItem, depth int) string {
 	return result
 }
 
-func generatedEventModifier(node *designNode, event, valueType string) string {
+func generatedEventModifier(node *designNode, event string) string {
 	handler := eventHandler(node, event)
 	if handler == "" {
 		return ""
 	}
-	parameter := ""
-	if valueType != "" {
-		parameter = valueType
-	}
-	return fmt.Sprintf(".%s(func(%s) { app.%s() })", event, parameter, handler)
+	signature := eventSignatureFor(node.Kind, event)
+	return fmt.Sprintf(".%s(func(%s) { app.%s(%s) })", event, signature.parameterDeclaration(), handler, signature.arguments())
 }
 
 func layoutModifiers(node *designNode) string {

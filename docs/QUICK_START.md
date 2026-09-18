@@ -258,13 +258,11 @@ editor, then choose **Apply Properties**.
 - Tree: one path per line with `/` between levels.
 
 The Events inspector offers selection and activation events appropriate to the
-control. Inside an event, read the current selection from its component. For
-example:
+control. Studio shows the typed parameters above the event editor. A List
+selection receives `index` and `value` directly:
 
 ```go
-if _, value, ok := app.Widgets().KindList.Selected(); ok {
-	app.Widgets().StatusLabel.SetText("Selected: " + value)
-}
+app.Widgets().StatusLabel.SetText("Selected: " + value)
 ```
 
 Open `examples/data_browser.rosaline` for a complete interface combining a
