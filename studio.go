@@ -62,6 +62,7 @@ const (
 	workspaceMenuTab
 	workspaceActionTab
 	workspaceComponentTab
+	workspaceSourceTab
 	workspaceCodeTab
 )
 
@@ -80,36 +81,42 @@ type studio struct {
 	component componentInspectorState
 	pageTitle string
 
-	palette          *rosaline.ListWidget
-	formList         *rosaline.ListWidget
-	formIDs          []string
-	syncForm         bool
-	tree             *rosaline.TreeWidget
-	canvas           *rosaline.CanvasWidget
-	workspace        *rosaline.TabsWidget
-	menuTree         *rosaline.TreeWidget
-	actionList       *rosaline.ListWidget
-	componentList    *rosaline.ListWidget
-	toolbarList      *rosaline.ListWidget
-	menuActionChoice *rosaline.ComboBoxWidget
-	codeEditor       *rosaline.TextAreaWidget
-	eventList        *rosaline.ListWidget
-	treeByID         map[string]*rosaline.TreeNode
-	menuByID         map[string]*rosaline.TreeNode
-	syncTree         bool
-	syncMenu         bool
-	menuID           string
-	actionID         string
-	componentID      string
-	toolbarID        string
-	actionIDs        []string
-	componentIDs     []string
-	toolbarIDs       []string
-	syncAction       bool
-	syncComponent    bool
-	syncToolbar      bool
-	tabPages         map[string]string
-	dragID           string
+	palette           *rosaline.ListWidget
+	formList          *rosaline.ListWidget
+	formIDs           []string
+	syncForm          bool
+	tree              *rosaline.TreeWidget
+	canvas            *rosaline.CanvasWidget
+	workspace         *rosaline.TabsWidget
+	menuTree          *rosaline.TreeWidget
+	actionList        *rosaline.ListWidget
+	componentList     *rosaline.ListWidget
+	toolbarList       *rosaline.ListWidget
+	menuActionChoice  *rosaline.ComboBoxWidget
+	codeEditor        *rosaline.TextAreaWidget
+	sourceTree        *rosaline.TreeWidget
+	sourceEditor      *rosaline.TextAreaWidget
+	sourceTabs        *rosaline.RadioGroupWidget
+	sourceWorkspace   *rosaline.TabsWidget
+	buildDiagnostics  *rosaline.ListWidget
+	buildOutputEditor *rosaline.TextAreaWidget
+	eventList         *rosaline.ListWidget
+	treeByID          map[string]*rosaline.TreeNode
+	menuByID          map[string]*rosaline.TreeNode
+	syncTree          bool
+	syncMenu          bool
+	menuID            string
+	actionID          string
+	componentID       string
+	toolbarID         string
+	actionIDs         []string
+	componentIDs      []string
+	toolbarIDs        []string
+	syncAction        bool
+	syncComponent     bool
+	syncToolbar       bool
+	tabPages          map[string]string
+	dragID            string
 
 	availableEvents []eventSpec
 	selectedEvent   int
@@ -123,10 +130,23 @@ type studio struct {
 	redo      [][]byte
 	clipboard *designNode
 
-	runTask      *rosaline.Task
-	runMu        sync.Mutex
-	runDirectory string
-	runOutput    string
+	runTask       *rosaline.Task
+	runMu         sync.Mutex
+	runDirectory  string
+	runOutput     string
+	runAfterBuild bool
+
+	sourceFiles     map[string]projectFile
+	sourceNodes     map[string]*rosaline.TreeNode
+	sourceDocuments map[string]*sourceDocument
+	sourceOrder     []string
+	activeSource    string
+	sourceTabValue  string
+	sourceText      string
+	sourceFileName  string
+	syncSource      bool
+	buildOutput     string
+	diagnostics     []buildDiagnostic
 }
 
 func newStudio() *studio {
@@ -140,6 +160,9 @@ func newStudio() *studio {
 		selectedEvent:   -1,
 		previewPictures: make(map[string]*rosaline.Picture),
 		tabPages:        make(map[string]string),
+		sourceFiles:     make(map[string]projectFile),
+		sourceNodes:     make(map[string]*rosaline.TreeNode),
+		sourceDocuments: make(map[string]*sourceDocument),
 	}
 	result.loadInspector()
 	result.loadProjectInspector()
@@ -233,6 +256,18 @@ func (studio *studio) run() {
 		studio.editSelectedEvent()
 	})
 	studio.codeEditor = rosaline.TextArea(&studio.codeBody).Size(72, 28).Expand()
+	studio.sourceTree = rosaline.Tree().Width(220).Height(22).Expand()
+	studio.sourceTree.OnSelect(func(node *rosaline.TreeNode) {
+		if node != nil {
+			studio.openSourceFile(node.Value())
+		}
+	})
+	studio.sourceTabs = rosaline.RadioGroup(&studio.sourceTabValue).Horizontal().OnChange(studio.switchSourceFile)
+	studio.sourceEditor = rosaline.GoCodeEditor(&studio.sourceText).Size(72, 27).Expand().OnChange(studio.sourceChanged)
+	studio.buildDiagnostics = rosaline.List().Size(72, 8).Expand().OnActivate(func(index int, _ string) {
+		studio.openDiagnostic(index)
+	})
+	studio.buildOutputEditor = rosaline.TextArea(&studio.buildOutput).Monospace().ReadOnly().Size(72, 20).Expand()
 	studio.menuTree = rosaline.Tree().Width(620).Height(24).Expand()
 	studio.menuTree.OnSelect(func(node *rosaline.TreeNode) {
 		if studio.syncMenu || node == nil {
@@ -272,6 +307,7 @@ func (studio *studio) run() {
 	studio.runTask = rosaline.Background(func(ctx context.Context, report *rosaline.TaskReporter) error {
 		studio.runMu.Lock()
 		directory := studio.runDirectory
+		runAfterBuild := studio.runAfterBuild
 		studio.runMu.Unlock()
 		if _, err := exec.LookPath("go"); err != nil {
 			return fmt.Errorf("find Go command: %w", err)
@@ -299,7 +335,27 @@ func (studio *studio) run() {
 			return ctx.Err()
 		}
 		output.Reset()
-		command := exec.CommandContext(ctx, "go", "run", ".")
+		executable := buildExecutablePath(directory)
+		defer os.Remove(executable)
+		build := exec.CommandContext(ctx, "go", "build", "-o", executable, ".")
+		build.Dir = directory
+		build.Env = environment
+		build.Stdout = &output
+		build.Stderr = &output
+		if err := build.Run(); err != nil {
+			studio.rememberRunOutput(output.String())
+			return fmt.Errorf("build generated application: %w", err)
+		}
+		if !runAfterBuild {
+			studio.rememberRunOutput(output.String())
+			report.Post(func() { studio.status = "Build succeeded" })
+			return nil
+		}
+
+		if !report.Report(70, "Starting generated application...") {
+			return ctx.Err()
+		}
+		command := exec.CommandContext(ctx, executable)
 		command.Dir = directory
 		command.Env = environment
 		command.Stdout = &output
@@ -318,18 +374,11 @@ func (studio *studio) run() {
 	}).OnProgress(func(progress rosaline.TaskProgress) {
 		studio.status = progress.Message
 	}).OnDone(func(err error) {
+		studio.publishBuildOutput(err)
 		if err == nil || errors.Is(err, context.Canceled) {
 			return
 		}
-		studio.status = "Preview failed"
-		studio.runMu.Lock()
-		output := studio.runOutput
-		studio.runMu.Unlock()
-		message := err.Error()
-		if output != "" {
-			message += "\n\n" + output
-		}
-		rosaline.Error("Could not run generated application", message)
+		studio.status = "Build failed - select an error to open its source"
 	})
 
 	studio.rebuildForms()
@@ -347,6 +396,7 @@ func (studio *studio) run() {
 			rosaline.MenuItem("Save As...", func() { studio.saveAs() }).Shortcut("Primary+Shift+S"),
 			rosaline.MenuSeparator(),
 			rosaline.MenuItem("Generate Go Project", func() { studio.generate() }).Shortcut("Primary+G"),
+			rosaline.MenuItem("Build Project", studio.buildGenerated).Shortcut("Primary+B"),
 			rosaline.MenuItem("Build and Run", studio.runGenerated).Shortcut("F5"),
 			rosaline.MenuSeparator(),
 			rosaline.MenuItem("Quit", rosaline.Quit).Shortcut("Primary+Q"),
@@ -365,6 +415,8 @@ func (studio *studio) run() {
 			rosaline.MenuItem("Delete Selected Widget", studio.deleteSelected),
 		),
 		rosaline.Menu("Project",
+			rosaline.MenuItem("Project Source", studio.showSourceWorkspace),
+			rosaline.MenuSeparator(),
 			rosaline.MenuItem("New Form", studio.addForm),
 			rosaline.MenuItem("Duplicate Form", studio.duplicateForm),
 			rosaline.MenuItem("Delete Form", studio.deleteForm),
@@ -409,7 +461,7 @@ func (studio *studio) run() {
 			rosaline.Row(
 				rosaline.LabelFunc(func() string { return studio.status }).Color(theme.Muted),
 				rosaline.Spring(),
-				rosaline.Label("F5 Run - Primary+G Generate - Primary+S Save").Color(theme.Muted),
+				rosaline.Label("F5 Run - Primary+B Build - Primary+G Generate - Primary+S Save").Color(theme.Muted),
 			).Gap(8),
 		).Gap(9).Expand(),
 	})
@@ -454,7 +506,7 @@ func (studio *studio) selectForm(id string) {
 
 func (studio *studio) rememberRunOutput(output string) {
 	studio.runMu.Lock()
-	studio.runOutput = tailOutput(output, 2400)
+	studio.runOutput = tailOutput(output, 64000)
 	studio.runMu.Unlock()
 }
 
@@ -511,6 +563,7 @@ func (studio *studio) buildWorkspace() rosaline.Widget {
 		studio.codeEditor,
 		rosaline.Row(
 			rosaline.Button("Save Event Code", func() { studio.saveOpenHandler() }).Primary(),
+			rosaline.Button("View Generated Method", studio.openGeneratedHandler),
 			rosaline.Button("Back to Form", studio.showDesigner),
 		).Gap(8),
 	).Gap(8).Expand()
@@ -588,8 +641,14 @@ func (studio *studio) buildWorkspace() rosaline.Widget {
 		rosaline.Tab("Menus", menus),
 		rosaline.Tab("Actions", actions),
 		rosaline.Tab("Components", studio.buildComponentWorkspace()),
-		rosaline.Tab("Code", code),
+		rosaline.Tab("Source", studio.buildSourceWorkspace()),
+		rosaline.Tab("Event Code", code),
 	).Expand()
+	studio.workspace.OnChange(func(index int, _ string) {
+		if index == workspaceSourceTab {
+			studio.prepareSourceWorkspace()
+		}
+	})
 	return rosaline.Card(studio.workspace).Padding(5).Expand()
 }
 
@@ -1582,6 +1641,7 @@ func (studio *studio) newDesign() {
 	studio.codeReturnsBool = false
 	studio.previewPictures = make(map[string]*rosaline.Picture)
 	studio.tabPages = make(map[string]string)
+	studio.resetSourceWorkspace()
 	if studio.codeEditor != nil {
 		studio.codeEditor.SetText("")
 		studio.codeEditor.MarkSaved()
@@ -1626,6 +1686,7 @@ func (studio *studio) openDesign() {
 	studio.codeReturnsBool = false
 	studio.previewPictures = make(map[string]*rosaline.Picture)
 	studio.tabPages = make(map[string]string)
+	studio.resetSourceWorkspace()
 	if studio.codeEditor != nil {
 		studio.codeEditor.SetText("")
 		studio.codeEditor.MarkSaved()
@@ -1637,6 +1698,9 @@ func (studio *studio) openDesign() {
 
 func (studio *studio) save() bool {
 	if studio.codeEditor != nil && studio.codeEditor.Modified() && !studio.saveOpenHandler() {
+		return false
+	}
+	if !studio.saveAllSourceDocuments() {
 		return false
 	}
 	if studio.path == "" {
@@ -1654,6 +1718,12 @@ func (studio *studio) save() bool {
 }
 
 func (studio *studio) saveAs() bool {
+	if studio.codeEditor != nil && studio.codeEditor.Modified() && !studio.saveOpenHandler() {
+		return false
+	}
+	if !studio.saveAllSourceDocuments() {
+		return false
+	}
 	path, ok := rosaline.SaveFileDialog(rosaline.FileDialogOptions{
 		Title:            "Save Rosaline Design",
 		InitialFile:      "app.rosaline",
@@ -1672,15 +1742,24 @@ func (studio *studio) saveAs() bool {
 	}
 	studio.path = path
 	studio.previewPictures = make(map[string]*rosaline.Picture)
-	if !studio.save() {
+	if err := saveDesign(studio.path, studio.project); err != nil {
+		rosaline.Error("Could not save design", err.Error())
 		studio.path = oldPath
+		studio.status = "Save failed"
 		return false
 	}
+	studio.resetSourceWorkspace()
+	studio.dirty = false
+	studio.status = "Saved " + filepath.Base(studio.path)
+	studio.updateWindowTitle()
 	return true
 }
 
 func (studio *studio) confirmChanges(action string) bool {
 	if studio.codeEditor != nil && studio.codeEditor.Modified() && !studio.confirmOpenHandler("") {
+		return false
+	}
+	if !studio.confirmSourceChanges(action) {
 		return false
 	}
 	if !studio.dirty {
@@ -1710,37 +1789,15 @@ func (studio *studio) generate() bool {
 	studio.runMu.Lock()
 	studio.runDirectory = directory
 	studio.runMu.Unlock()
+	if studio.sourceTree != nil {
+		studio.refreshProjectFiles()
+	}
 	studio.status = fmt.Sprintf("Generated %d files in %s; preserved %d developer files", len(report.Updated)+len(report.Created), filepath.Base(directory), len(report.Kept))
 	return true
 }
 
 func (studio *studio) runGenerated() {
-	if studio.runTask.Running() {
-		studio.status = "A preview is already running"
-		return
-	}
-	if !studio.save() {
-		return
-	}
-	directory := generatedApplicationDirectory(studio.path)
-	if generatedApplicationNeedsSetup(directory) {
-		message := "This generated application has not been set up yet.\n\n" +
-			"Studio will:\n" +
-			"- create or update " + directory + "\n" +
-			"- generate readable Rosaline Go files\n" +
-			"- download Rosaline and its dependencies\n" +
-			"- build and run the application\n\n" +
-			"Set it up now?"
-		if !rosaline.Confirm("Set up generated application", message) {
-			studio.status = "Application setup canceled"
-			return
-		}
-	}
-	if !studio.generate() {
-		return
-	}
-	studio.status = "Starting generated application..."
-	studio.runTask.Start()
+	studio.startBuild(true)
 }
 
 func (studio *studio) updateWindowTitle() {
@@ -1765,7 +1822,7 @@ func (studio *studio) documentName() string {
 func (studio *studio) showHelp() {
 	rosaline.Message(
 		"Rosaline Studio Quick Help",
-		"1. Select or create a form in Project Forms.\n2. Select a container and double-click a palette item to add it.\n3. Give controls memorable component names in Properties.\n4. Right-click to cut, copy, paste, duplicate, or delete widgets.\n5. Add Tabs, click a page header, and manage pages in the Pages inspector.\n6. Edit List, Table, Tree, or RadioGroup content under Properties > Data.\n7. Use Events to assign a handler, or double-click a form control.\n8. Open Menus to build the form's menu bar.\n9. Open Actions to share commands between menus and a form toolbar.\n10. Open Components to add timers and reusable file dialogs.\n11. Select a form's root layout to edit OnOpen, OnCloseRequest, and OnClose.\n12. Write event code with app.Widgets(), app.Components(), and app.Windows().\n13. Press F5 to generate and run.\n\nStudio never overwrites handlers.go, main.go, go.mod, or README.md.",
+		"1. Select or create a form in Project Forms.\n2. Select a container and double-click a palette item to add it.\n3. Give controls memorable component names in Properties.\n4. Right-click to cut, copy, paste, duplicate, or delete widgets.\n5. Add Tabs, click a page header, and manage pages in the Pages inspector.\n6. Edit List, Table, Tree, or RadioGroup content under Properties > Data.\n7. Use Events to assign a handler, or double-click a form control.\n8. Open Menus to build the form's menu bar.\n9. Open Actions to share commands between menus and a form toolbar.\n10. Open Components to add timers and reusable file dialogs.\n11. Select a form's root layout to edit OnOpen, OnCloseRequest, and OnClose.\n12. Write event code with app.Widgets(), app.Components(), and app.Windows().\n13. Open Source to edit the complete generated Go project.\n14. Press Primary+B to build or F5 to build and run.\n\nStudio only replaces files ending in _generated.go.",
 	)
 	studio.canvas.Focus()
 }
@@ -1773,7 +1830,7 @@ func (studio *studio) showHelp() {
 func (studio *studio) showAbout() {
 	rosaline.Message(
 		"About Rosaline Studio",
-		"Rosaline Studio v0.9.0\n\nA pure-Go Lazarus-style RAD environment built with Rosaline.\n\nGenerated code remains normal, readable Rosaline Go.",
+		"Rosaline Studio v0.10.0\n\nA pure-Go Lazarus-style RAD environment built with Rosaline.\n\nGenerated code remains normal, readable Rosaline Go.",
 	)
 	studio.canvas.Focus()
 }

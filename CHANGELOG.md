@@ -2,6 +2,22 @@
 
 All notable Rosaline Studio changes are documented here.
 
+## v0.10.0 - 2026-09-17
+
+- Add a Lazarus-style Project Source workspace with grouped developer,
+  generated, project, and asset files.
+- Add tabbed Go source editing with fixed-width text, lightweight syntax
+  coloring, dirty marks, formatting, and save-all support.
+- Let developers create, rename, and delete their own Go files while keeping
+  Studio-owned generated files read-only and protecting required entry files.
+- Add a separate Build command and a persistent Build Output view.
+- Parse compiler diagnostics and open the exact source file, line, and column
+  when an error is activated.
+- Save every open developer file before generation, building, or running.
+- Add direct navigation from Studio's event-body editor to the generated Go
+  method that calls it.
+- Require Rosaline v0.20.0 for source-editor presentation and navigation APIs.
+
 ## v0.9.0 - 2026-09-17
 
 - Add a dedicated Lazarus-style Components designer and compact form tray for

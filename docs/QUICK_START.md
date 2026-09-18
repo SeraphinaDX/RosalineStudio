@@ -270,7 +270,19 @@ if _, value, ok := app.Widgets().KindList.Selected(); ok {
 Open `examples/data_browser.rosaline` for a complete interface combining a
 tree, table, list, radio group, tabs, and working event methods.
 
-## 15. Keep designing safely
+## 15. Add your own Go source
+
+Open **Project > Project Source**. `handlers.go` opens as normal editable Go,
+while files ending in `_generated.go` remain visible but read-only.
+
+Enter `greeting.go` under **New Go filename**, then choose **New**. Add any
+helper function or type you want. **Save** formats and writes the active file;
+**Save All** writes every changed developer file.
+
+Choose **Build** to compile without launching the application. If Go reports
+an error, double-click it under Build Output to return to the exact source line.
+
+## 16. Keep designing safely
 
 You can now add widgets, rename state fields, switch themes, or completely
 rearrange the layout. On every generation:
@@ -291,6 +303,7 @@ and custom behavior in `handlers.go` or additional `.go` files you create.
 | Primary+S | Save design |
 | Primary+Shift+S | Save as |
 | Primary+G | Generate project |
+| Primary+B | Build project |
 | F5 | Generate and run |
 | Primary+Z | Undo |
 | Primary+Shift+Z | Redo |
